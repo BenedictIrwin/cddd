@@ -1052,6 +1052,7 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
         self.feature_regression_dense_1 = nn.Linear(<in>,512,...)
         self.feature_regression_dense_2 = nn.Linear(512,128,...)
         self.feature_regression_dense_2 = nn.Linear(128,self.num_features,...)
+        self.features_MSE_loss = nn.MSELoss()
 
     def build_graph(self):
         """Method that defines the graph for a translation model instance with the additional
@@ -1173,16 +1174,18 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
     def _compute_loss(self, sequence_logits, features_predictions):
         """Method that calculates the loss function."""
         ## TF SPARSE SOFTMAX
-        crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.shifted_target_seq,
-                                                                  logits=sequence_logits)
-        crossent = F.crossent(...) ### Edit
+        #crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.shifted_target_seq,
+        #                                                          logits=sequence_logits)
+        crossent = F.crossent(sequence_logits, self.shifted_target_seq)
         ### TF REDUCE MEAN
         #loss_sequence = (tf.reduce_sum(crossent * self.target_mask))
         loss_sequence = torch.sum(crossent * self.target_mask)
         ### TF LOSSES MSE
-        loss_features = tf.losses.mean_squared_error(labels=self.mol_features,
-                                                     predictions=features_predictions,
-                                                    )
+        #loss_features = tf.losses.mean_squared_error(labels=self.mol_features,
+        #                                             predictions=features_predictions,
+        #                                            )
+        loss_features = self.features_MSELoss(features_predictions, self.mol_features)
+        ### Example: loss_features.backward()
         return loss_sequence, loss_features
 
 class NoisyGRUSeq2SeqWithFeatures(GRUSeq2SeqWithFeatures):
@@ -1214,29 +1217,56 @@ class NoisyGRUSeq2SeqWithFeatures(GRUSeq2SeqWithFeatures):
         self.emb_noise = hparams.emb_noise
         
         ### TORCH LAYERS
+        # dropout
+        # GRU
+        self.encoder_dropout = torch.nn.Dropout(p = 1.0 - self.input_dropout, inplace = )   ## p is probability of element to be ZEROED
+        self.encoder_GRU = torch.nn.GRU(input_size = , hidden_size = , num_layers =)
+        self.dense_layer - nn.Linear(<in>,self.embedding_size,...)
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
         if self.mode == "TRAIN":
-            max_time = tf.shape(encoder_emb_inp)[1]
-            encoder_emb_inp = tf.nn.dropout(encoder_emb_inp,
-                                            1. - self.input_dropout,
-                                            noise_shape=[self.batch_size, max_time, 1])
-        encoder_cell = [tf.nn.rnn_cell.GRUCell(size) for size in self.cell_size]
-        encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
-        encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
-                                                           encoder_emb_inp,
-                                                           sequence_length=self.input_len,
-                                                           dtype=tf.float32,
-                                                           time_major=False)
-        emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
-                              self.embedding_size
-                             )
+            ### TF SHAPE
+            #max_time = tf.shape(encoder_emb_inp)[1]
+            max_time = torch.size(encoder_emb_inp)[1]
+            ### TF NN DROPOUT
+            #encoder_emb_inp = tf.nn.dropout(encoder_emb_inp,
+            #                                1. - self.input_dropout,  ## rate, proability elements are set to 0
+            #                                noise_shape=[self.batch_size, max_time, 1])
+            !!!! no noise_shape parameter in pytorch dropout...
+            !!!! This will mean depth will be randomised...
+            !!!! Solution -> Implement custom layer?
+            encoder_emb_inp = self.encoder_dropout(encoder_emb_inp)
+
+        #encoder_cell = [tf.nn.rnn_cell.GRUCell(size) for size in self.cell_size]
+        #encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
+        #encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
+        #                                                   encoder_emb_inp,
+        #                                                   sequence_length=self.input_len,
+        #                                                   dtype=tf.float32,
+        #                                                   time_major=False) ### implies size [batch_size, max_time, depth]
+        
+        ### EXAMPLE
+        #>>> rnn = nn.GRU(10, 20, 2)
+        #>>> input = torch.randn(5, 3, 10)
+        #>>> h0 = torch.randn(2, 3, 20)
+        #>>> output, hn = rnn(input, h0)
+
+        h0 = torch.???() ## probably zero, or random?
+        encoder_outputs, encoder_state = self.encoder_GRU(encoder_emb_inp, h0)
+
+        ### TF LAYERS DENSE
+        #emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
+        #                      self.embedding_size
+        #                     )
+        emb = self.dense_layer(torch.cat(encoder_state, dim = 1))
+
         if (self.emb_noise >= 0) & (self.mode == "TRAIN"):
-            emb += tf.random_normal(shape=tf.shape(emb),
-                                    mean=0.0,
-                                    stddev=self.emb_noise,
-                                    dtype=tf.float32)
+            #emb += tf.random_normal(shape=tf.shape(emb),
+            #                        mean=0.0,
+            #                        stddev=self.emb_noise,
+            #                        dtype=tf.float32)
+            emb += torch.normal(mean = torch.zeros(torch.size(emb)), std = self.emb_noise)
         emb = self.emb_activation(emb)
         return emb
 
@@ -1247,14 +1277,22 @@ class ModelWithGrads(NoisyGRUSeq2SeqWithFeatures):
         ### TORCH LAYERS
 
     def build_graph(self):
-        with tf.name_scope("Input"):
-            self.input_seq = tf.placeholder(tf.int32, [None, None])
-            self.input_len = tf.placeholder(tf.int32, [None])
-            self.start_grads = tf.placeholder(tf.float32, [None, ndims])
-            encoder_emb_inp = self._emb_lookup(self.input_seq)
+        #with tf.name_scope("Input"):
+        self.input_seq = tf.placeholder(tf.int32, [None, None])
+        self.input_len = tf.placeholder(tf.int32, [None])
+        self.start_grads = tf.placeholder(tf.float32, [None, ndims])
+        encoder_emb_inp = self._emb_lookup(self.input_seq)
 
-        with tf.variable_scope("Encoder"):
-            self.encoded_seq = self._encoder(encoder_emb_inp)
+        #with tf.variable_scope("Encoder"):
+        self.encoded_seq = self._encoder(encoder_emb_inp)
+        ### TF GRADIENTS!
         self.grads = tf.gradients(self.encoded_seq, encoder_emb_inp, self.start_grads)
+        #self.grads = torch.gradient(self)
+        self.grads = torch.autograd.grad(<Y>,<X>, torch.ones_like(<Y>)) ## Check this 
+        ##https://discuss.pytorch.org/t/newbie-pytorch-equivalent-of-tf-tf-gradients-out-in/130988/2
+        ## versus
+        ## https://www.tensorflow.org/api_docs/python/tf/gradients
 
+        ### TF TRAIN SAVER
         self.saver_op = tf.train.Saver()
+        self.saver_op = torch.save() ### Needs more thought
