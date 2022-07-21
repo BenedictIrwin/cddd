@@ -29,7 +29,7 @@ class BaseModel(ABC):
         in a contineous space.
         global_step: Counter for steps during training.
         save_dir: Path to directory used to save the model and logs.
-        checkpoint_path: path to the model checkpoint file.
+        checkpoint_path: Path to the model checkpoint file.
         batch_size: Number of samples per training batch.
         rand_input_swap: Flag to define if (for SMILES input) the input SMILES should be swapped
         randomly between canonical SMILES (usually output sequnce) and random shuffled SMILES
@@ -37,7 +37,7 @@ class BaseModel(ABC):
         measures_to_log: Dictonary with values to log.
         emb_activation: Activation function used in the bottleneck layer.
         lr: Learning rate for training the model.
-        lr_decay: Boolean to define if learning rate deacay is used.
+        lr_decay: Boolean to define if learning rate decay is used.
         lr_decay_frequency: Number of steps between learning rate decay steps.
         lr_decay_factor: Amount of learning rate decay.
         beam_width: Width of the the window used for the beam search decoder.
@@ -102,20 +102,11 @@ class BaseModel(ABC):
             self.beam_width = hparams.beam_width
         if mode not in ["TRAIN", "EVAL", "ENCODE", "DECODE"]:
             raise ValueError("Choose one of following modes: TRAIN, EVAL, ENCODE, DECODE")
+        
+        ### TORCH LAYERS
 
-    ### TO FLESH OUT
-    def forward():
-        pass
-        if self.mode in ['TRAIN','EVAL']:
-          pass
-        if self.mode == 'ENCODE':
-          pass
-        if self.mode == 'DECODE':
-          pass
-        if self.mode == 'EVAL':
-          pass
-
-    ### TO EVENTUALLY BE RENAMED/MOVED, probably becomes the forward
+    ### TO EVENTUALLY BE RENAMED/MOVED,  becomes the forward
+    ### def forward(self):
     def build_graph(self):
         """Method that defines the graph for a translation model instance."""
         if self.mode in ["TRAIN", "EVAL"]:
@@ -163,17 +154,27 @@ class BaseModel(ABC):
 
         if self.mode == "DECODE":
             if self.one_hot_embedding:
-                ### ONE HOT
-                self.decoder_embedding = tf.one_hot(
-                    list(range(0, self.decode_voc_size)),
-                    self.decode_voc_size
+                ### ONE HOT, indices, depth
+                ### Takes [0,N] interval, depth N
+                #self.decoder_embedding = tf.one_hot(
+                #    list(range(0, self.decode_voc_size)),
+                #    self.decode_voc_size
+                #)
+                self.decoder_embedding = F.one_hot(
+                    torch.arange(0, self.decode_voc_size), 
+                    num_classes = self.decode_voc_size 
                 )
+
+
+
             elif self.encode_vocabulary == self.decode_vocabulary:
                 ### GET VARIABLE
                 self.decoder_embedding = tf.get_variable(
                     "char_embedding",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                ### Figure out how to initialise the tensors consistently
+                self.decoder_embedding = torch.tensor(...init, requires_grad = True)
             else:
                 ### GET VARIABLE
                 self.decoder_embedding = tf.get_variable(
@@ -266,9 +267,13 @@ class BaseModel(ABC):
         """
         if self.one_hot_embedding:
             ### TF ONE HOT
-            self.encoder_embedding = tf.one_hot(
-                list(range(0, self.encode_voc_size)),
-                self.encode_voc_size
+            #self.encoder_embedding = tf.one_hot(
+            #    list(range(0, self.encode_voc_size)),
+            #    self.encode_voc_size
+            #)
+            self.encoder_embedding = F.one_hot(
+                torch.arange(0, self.encode_voc_size), 
+                num_classes = self.encode_voc_size 
             )
         else:
             ### TF GET VAR
@@ -284,9 +289,13 @@ class BaseModel(ABC):
                 self.decoder_embedding = self.encoder_embedding
             elif self.one_hot_embedding:
                 ## TF ONE HOT
-                self.decoder_embedding = tf.one_hot(
-                    list(range(0, self.decode_voc_size)),
-                    self.decode_voc_size
+                #self.decoder_embedding = tf.one_hot(
+                #    list(range(0, self.decode_voc_size)),
+                #    self.decode_voc_size
+                #)
+                self.decoder_embedding = F.one_hot(
+                    torch.arange(0, self.decode_voc_size), 
+                    num_classes = self.decode_voc_size 
                 )
             else:
                 ## TF GET VAR
@@ -504,6 +513,8 @@ class GRUSeq2Seq(BaseModel):
         super().__init__(mode, iterator, hparams)
         self.cell_size = hparams.cell_size
         self.reverse_decoding = hparams.reverse_decoding
+        
+        ### TORCH LAYERS
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
@@ -597,6 +608,8 @@ class GRUVAE(GRUSeq2Seq):
         self.div_loss_scale = hparams.div_loss_scale
         self.div_loss_rate = hparams.div_loss_rate
         
+        ### TORCH LAYERS
+        
     def _encoder(self, encoder_emb_inp):
 
         """Method that defines the encoder part of the translation model graph."""
@@ -675,8 +688,9 @@ class GRUVAE(GRUSeq2Seq):
             ###
             with tf.variable_scope("Decoder"):
                 logits = self._decoder(encoded_seq, decoder_emb_inp)
-                ###
-                self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
+                ### TF ARGMAX
+                ### self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
+                self.prediction = torch.argmax(logits, dim=2)
             ###
             with tf.name_scope("Measures"):
                 #rossent, divergence, self.loss = self._compute_loss(logits, posterior)
@@ -704,9 +718,13 @@ class GRUVAE(GRUSeq2Seq):
         if self.mode == "DECODE":
             if self.one_hot_embedding:
                 ### TF ONE HOT
-                self.decoder_embedding = tf.one_hot(
-                    list(range(0, self.decode_voc_size)),
-                    self.decode_voc_size
+                #self.decoder_embedding = tf.one_hot(
+                #    list(range(0, self.decode_voc_size)),
+                #    self.decode_voc_size
+                #)
+                self.decoder_embedding = F.one_hot(
+                    torch.arange(0, self.decode_voc_size), 
+                    num_classes = self.decode_voc_size 
                 )
             elif self.encode_vocabulary == self.decode_vocabulary:
                 ### TF GET VAR
@@ -760,6 +778,8 @@ class NoisyGRUSeq2Seq(GRUSeq2Seq):
         super().__init__(mode, iterator, hparams)
         self.input_dropout = hparams.input_dropout
         self.emb_noise = hparams.emb_noise
+        
+        ### TORCH LAYERS
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
@@ -809,6 +829,8 @@ class LSTMSeq2Seq(BaseModel):
         """
         super().__init__(mode, iterator, hparams)
         self.cell_size = hparams.cell_size
+        
+        ### TORCH LAYERS
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
@@ -878,27 +900,45 @@ class Conv2GRUSeq2Seq(GRUSeq2Seq):
         self.conv_hidden_size = hparams.conv_hidden_size
         self.kernel_size = hparams.kernel_size
 
+        ### TORCH LAYERS
+        encoder_conv1d = {}
+        encoder_max_pool = {}
+        for i, size in enumerate(self.conv_hidden_size):
+            encoder_conv1d[i] = torch.
+            encoder_max_pool[i] = torch.
+        encoder[i??+1] = torch.
+
+
+        encoder_dense_layer = torch.
+
     def _encoder(self, encoder_emb_inp):
+        ### CHECK USE OF THE CONV1D LAYER
         """Method that defines the encoder part of the translation model graph."""
         for i, size in enumerate(self.conv_hidden_size):
+            ### TF LAYERS CONV1D
             x = tf.layers.conv1d(encoder_emb_inp,
                                  size,
                                  self.kernel_size[i],
                                  activation=tf.nn.relu,
                                  padding='SAME')
             if i+1 < len(self.conv_hidden_size):
+                ### TF LAYERS MAX POOLING1D
                 x = tf.layers.max_pooling1d(x, 3, 2, padding='SAME')
 
+        ### TF LAYERS CONV1D
         x = tf.layers.conv1d(x,
                              self.conv_hidden_size[-1],
                              1,
                              activation=tf.nn.relu,
                              padding='SAME')
 
+        ### TF LAYERS DENSE, REDUCE MEAN
         emb = tf.layers.dense(tf.reduce_mean(x, axis=1),
                               self.embedding_size,
                               activation=self.emb_activation
                              )
+        emb = encoder_dense_layer(torch.mean(x, dim = 1))
+        emb = self.emb_activation(emb) ## Check
         return emb
 
 class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
@@ -924,89 +964,117 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
         """
         super().__init__(mode, iterator, hparams)
         self.num_features = hparams.num_features
+        
+        ### TORCH LAYERS
 
     def build_graph(self):
         """Method that defines the graph for a translation model instance with the additional
         feature prediction task.
         """
         if self.mode in ["TRAIN", "EVAL"]:
-            with tf.name_scope("Input"):
-                (self.input_seq,
-                 self.shifted_target_seq,
-                 self.input_len,
-                 self.shifted_target_len,
-                 self.target_mask,
-                 encoder_emb_inp,
-                 decoder_emb_inp,
-                 self.mol_features) = self._input(with_features=True)
+            #with tf.name_scope("Input"):
+            (self.input_seq,
+            self.shifted_target_seq,
+            self.input_len,
+            self.shifted_target_len,
+            self.target_mask,
+            encoder_emb_inp,
+            decoder_emb_inp,
+            self.mol_features) = self._input(with_features=True)
 
-            with tf.variable_scope("Encoder"):
-                encoded_seq = self._encoder(encoder_emb_inp)
+            #with tf.variable_scope("Encoder"):
+            encoded_seq = self._encoder(encoder_emb_inp)
 
-            with tf.variable_scope("Decoder"):
-                sequence_logits = self._decoder(encoded_seq, decoder_emb_inp)
-                self.sequence_prediction = tf.argmax(sequence_logits,
-                                                     axis=2,
-                                                     output_type=tf.int32)
+            #with tf.variable_scope("Decoder"):
+            sequence_logits = self._decoder(encoded_seq, decoder_emb_inp)
+                ### TF ARGMAX
+                #self.sequence_prediction = tf.argmax(sequence_logits,
+                #                                     axis=2,
+                #                                     output_type=tf.int32)
+            self.sequence_prediction = torch.argmax(sequence_logits, dim=2)
 
-            with tf.variable_scope("Feature_Regression"):
-                feature_predictions = self._feature_regression(encoded_seq)
+            #with tf.variable_scope("Feature_Regression"):
+            feature_predictions = self._feature_regression(encoded_seq)
 
-            with tf.name_scope("Measures"):
-                self.loss_sequence, self.loss_features = self._compute_loss(sequence_logits,
+            #with tf.name_scope("Measures"):
+            self.loss_sequence, self.loss_features = self._compute_loss(sequence_logits,
                                                                             feature_predictions)
-                self.loss = self.loss_sequence + self.loss_features
-                self.accuracy = self._compute_accuracy(self.sequence_prediction)
-                self.measures_to_log["loss"] = self.loss
-                self.measures_to_log["accuracy"] = self.accuracy
+            self.loss = self.loss_sequence + self.loss_features
+            self.accuracy = self._compute_accuracy(self.sequence_prediction)
+            self.measures_to_log["loss"] = self.loss
+            self.measures_to_log["accuracy"] = self.accuracy
 
             if self.mode == "TRAIN":
-                with tf.name_scope("Training"):
-                    self._training()
+                #with tf.name_scope("Training"):
+                self._training()
 
         if self.mode == "ENCODE":
-            with tf.name_scope("Input"):
-                self.input_seq = tf.placeholder(tf.int32, [None, None])
-                self.input_len = tf.placeholder(tf.int32, [None])
-                encoder_emb_inp = self._emb_lookup(self.input_seq)
+            ### TF NAME SCOPE
+            #with tf.name_scope("Input"):
+            ### TF PLACEHOLDER
+            self.input_seq = tf.placeholder(tf.int32, [None, None])
+            ### TF PLACEHOLDER
+            self.input_len = tf.placeholder(tf.int32, [None])
+            encoder_emb_inp = self._emb_lookup(self.input_seq)
 
             with tf.variable_scope("Encoder"):
                 self.encoded_seq = self._encoder(encoder_emb_inp)
 
         if self.mode == "DECODE":
             if self.one_hot_embedding:
-                self.decoder_embedding = tf.one_hot(
-                    list(range(0, self.decode_voc_size)),
-                    self.decode_voc_size
+                ### TF Decoder
+                #self.decoder_embedding = tf.one_hot(
+                #    list(range(0, self.decode_voc_size)),
+                #    self.decode_voc_size
+                #)
+                self.decoder_embedding = F.one_hot(
+                    torch.arange(0, self.decode_voc_size), 
+                    num_classes = self.decode_voc_size 
                 )
             elif self.encode_vocabulary == self.decode_vocabulary:
+                ### TF GET VAR
                 self.decoder_embedding = tf.get_variable(
                     "char_embedding",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                self.decoder_embedding = torch.tensor(..., requires_grad = True)
+
             else:
+                ### TF GET VAR
                 self.decoder_embedding = tf.get_variable(
                     "char_embedding2",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                self.decoder_embedding = toach.tensor(..., requires_grad = True)
 
-            with tf.name_scope("Input"):
-                self.encoded_seq = tf.placeholder(tf.float32, [None, self.embedding_size])
-                self.maximum_iterations = tf.placeholder(tf.int32, [])
-            with tf.variable_scope("Decoder"):
-                self.output_ids = self._decoder(self.encoded_seq)
+            ### TF NAME SCOPE
+            #with tf.name_scope("Input"):
+            ### TF PLACEHOLDER
+            self.encoded_seq = tf.placeholder(tf.float32, [None, self.embedding_size])
+            ### TF PLACEHOLDER
+            self.maximum_iterations = tf.placeholder(tf.int32, [])
+            ### TF NAME SCOPE
+            #with tf.variable_scope("Decoder"):
+            self.output_ids = self._decoder(self.encoded_seq)
+        
+        ### TF SAVER
         self.saver_op = tf.train.Saver()
+        ### Probably needs to be triggered somewhere else
+        torch.save()
 
     def _feature_regression(self, encoded_seq):
         """Method that defines the feature classification part of the graph."""
+        ## TF LAYERS DENSE
         x = tf.layers.dense(inputs=encoded_seq,
                             units=512,
                             activation=tf.nn.relu
                             )
+        ## TF LAYERS DENSE
         x = tf.layers.dense(inputs=x,
                             units=128,
                             activation=tf.nn.relu
                             )
+        ## TF LAYERS DENSE
         x = tf.layers.dense(inputs=x,
                             units=self.num_features,
                             activation=None
@@ -1016,9 +1084,14 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
 
     def _compute_loss(self, sequence_logits, features_predictions):
         """Method that calculates the loss function."""
+        ## TF SPARSE SOFTMAX
         crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.shifted_target_seq,
                                                                   logits=sequence_logits)
-        loss_sequence = (tf.reduce_sum(crossent * self.target_mask))
+        crossent = F.crossent(...) ### Edit
+        ### TF REDUCE MEAN
+        #loss_sequence = (tf.reduce_sum(crossent * self.target_mask))
+        loss_sequence = torch.sum(crossent * self.target_mask)
+        ### TF LOSSES MSE
         loss_features = tf.losses.mean_squared_error(labels=self.mol_features,
                                                      predictions=features_predictions,
                                                     )
@@ -1051,6 +1124,8 @@ class NoisyGRUSeq2SeqWithFeatures(GRUSeq2SeqWithFeatures):
         super().__init__(mode, iterator, hparams)
         self.input_dropout = hparams.input_dropout
         self.emb_noise = hparams.emb_noise
+        
+        ### TORCH LAYERS
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
@@ -1080,6 +1155,8 @@ class NoisyGRUSeq2SeqWithFeatures(GRUSeq2SeqWithFeatures):
 class ModelWithGrads(NoisyGRUSeq2SeqWithFeatures):
     def __init__(self, mode, iterator, hparams):
         super().__init__(mode, iterator, hparams)
+        
+        ### TORCH LAYERS
 
     def build_graph(self):
         with tf.name_scope("Input"):
