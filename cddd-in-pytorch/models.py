@@ -31,7 +31,7 @@ class BaseModel(ABC):
         save_dir: Path to directory used to save the model and logs.
         checkpoint_path: path to the model checkpoint file.
         batch_size: Number of samples per training batch.
-        rand_input_swap: Flag to define if (for SMILES input) the input SMILES should be swapt
+        rand_input_swap: Flag to define if (for SMILES input) the input SMILES should be swapped
         randomly between canonical SMILES (usually output sequnce) and random shuffled SMILES
         (usually input sequnce).
         measures_to_log: Dictonary with values to log.
@@ -71,13 +71,17 @@ class BaseModel(ABC):
         self.one_hot_embedding = hparams.one_hot_embedding
         self.char_embedding_size = hparams.char_embedding_size
         
-        ### VARIABLE, N.B. Initializer
-        self.global_step = tf.get_variable('global_step',
-                                           [],
-                                           ### CONSTANT INITIALIZER
-                                           initializer=tf.constant_initializer(0),
-                                           trainable=False)
+        ### TF GET VAR, N.B. Initializer
+        #self.global_step = tf.get_variable('global_step',
+        #                                   [],
+        #                                   ### CONSTANT INITIALIZER
+        #                                   initializer=tf.constant_initializer(0),
+        #                                   trainable=False)
+        self.global_step = torch.tensor(0, requires_grad = False)
+
+
         self.save_dir = hparams.save_dir
+        ### Check this is in line with model saver
         self.checkpoint_path = os.path.join(self.save_dir, 'model.ckpt')
         self.batch_size = hparams.batch_size
         self.rand_input_swap = hparams.rand_input_swap
@@ -87,8 +91,9 @@ class BaseModel(ABC):
         elif hparams.emb_activation == "linear":
             self.emb_activation = lambda x: x
         else:
-            raise ValueError("This activationfunction is not implemented...")
+            raise ValueError("This activation function is not implemented...")
         if mode == "TRAIN":
+            ### Potentially subject to change
             self.lr = hparams.lr
             self.lr_decay = hparams.lr_decay
             self.lr_decay_frequency = hparams.lr_decay_frequency
@@ -98,49 +103,63 @@ class BaseModel(ABC):
         if mode not in ["TRAIN", "EVAL", "ENCODE", "DECODE"]:
             raise ValueError("Choose one of following modes: TRAIN, EVAL, ENCODE, DECODE")
 
+    ### TO FLESH OUT
+    def forward():
+        pass
+        if self.mode in ['TRAIN','EVAL']:
+          pass
+        if self.mode == 'ENCODE':
+          pass
+        if self.mode == 'DECODE':
+          pass
+        if self.mode == 'EVAL':
+          pass
+
+    ### TO EVENTUALLY BE RENAMED/MOVED, probably becomes the forward
     def build_graph(self):
         """Method that defines the graph for a translation model instance."""
         if self.mode in ["TRAIN", "EVAL"]:
             ### NAME SCOPE
-            with tf.name_scope("Input"):
-                (self.input_seq,
-                 self.shifted_target_seq,
-                 self.input_len,
-                 self.shifted_target_len,
-                 self.target_mask,
-                 encoder_emb_inp,
-                 decoder_emb_inp) = self._input()
+            #with tf.name_scope("Input"):
+            (self.input_seq,
+            self.shifted_target_seq,
+            self.input_len,
+            self.shifted_target_len,
+            self.target_mask,
+            encoder_emb_inp,
+            decoder_emb_inp) = self._input()
             ### VAR SCOPE
-            with tf.variable_scope("Encoder"):
-                encoded_seq = self._encoder(encoder_emb_inp)
+            #with tf.variable_scope("Encoder"):
+            encoded_seq = self._encoder(encoder_emb_inp)
             ### VAR SCOPE
-            with tf.variable_scope("Decoder"):
-                logits = self._decoder(encoded_seq, decoder_emb_inp)
+            #with tf.variable_scope("Decoder"):
+            logits = self._decoder(encoded_seq, decoder_emb_inp)
                 ### ARGMAX, N.B. int32
-                self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
+                ### self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
+            self.prediction = torch.argmax(logits, dim=2)
             ### NAME SCOPE
-            with tf.name_scope("Measures"):
-                self.loss = self._compute_loss(logits)
-                self.accuracy = self._compute_accuracy(self.prediction)
-                self.measures_to_log["loss"] = self.loss
-                self.measures_to_log["accuracy"] = self.accuracy
+            ### with tf.name_scope("Measures"):
+            self.loss = self._compute_loss(logits)
+            self.accuracy = self._compute_accuracy(self.prediction)
+            self.measures_to_log["loss"] = self.loss
+            self.measures_to_log["accuracy"] = self.accuracy
 
             if self.mode == "TRAIN":
                 ### NAME SCOPE
-                with tf.name_scope("Training"):
-                    self._training()
+                #with tf.name_scope("Training"):
+                self._training()
 
         if self.mode == "ENCODE":
             ### NAME SCOPE
-            with tf.name_scope("Input"):
-                ### PLACEHOLDER, N.B. int32
-                self.input_seq = tf.placeholder(tf.int32, [None, None])
-                ### PLACEHOLDER, N.B. int32
-                self.input_len = tf.placeholder(tf.int32, [None])
-                encoder_emb_inp = self._emb_lookup(self.input_seq)
+            #with tf.name_scope("Input"):
+            ### PLACEHOLDER, N.B. int32 ---> Directly use in forward
+            self.input_seq = tf.placeholder(tf.int32, [None, None])
+            ### PLACEHOLDER, N.B. int32 ---> Directly use in forward
+            self.input_len = tf.placeholder(tf.int32, [None])
+            encoder_emb_inp = self._emb_lookup(self.input_seq)
             ### VAR SCOPE
-            with tf.variable_scope("Encoder"):
-                self.encoded_seq = self._encoder(encoder_emb_inp)
+            #with tf.variable_scope("Encoder"):
+            self.encoded_seq = self._encoder(encoder_emb_inp)
 
         if self.mode == "DECODE":
             if self.one_hot_embedding:
@@ -286,13 +305,22 @@ class BaseModel(ABC):
 
         if self.lr_decay:
             ## TF TRAIN EXPONENTIAL DECAY
-            self.lr = tf.train.exponential_decay(self.lr,
-                                                 self.global_step,
-                                                 self.lr_decay_frequency,
-                                                 self.lr_decay_factor,
-                                                 staircase=True,)
+            #self.lr = tf.train.exponential_decay(self.lr,
+            #                                     self.global_step,
+            #                                     self.lr_decay_frequency,
+            #                                     self.lr_decay_factor,
+            #                                     staircase=True,)
+
+
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(self.opt, gamma =)
+            ## Here gamma should be multiplicative factor of decay, i.e. lr_decay_factor
+            ## Order needs to be fixed, i.e. rewrite to be more torch-like
+
         ### TF TRAIN ADAM OPT
-        self.opt = tf.train.AdamOptimizer(self.lr, name='optimizer')
+        #self.opt = tf.train.AdamOptimizer(self.lr, name='optimizer')
+        self.opt = torch.optim.Adam(self.parameters(),lr = self.lr)  ### BUT, self.parameters() probably not defined, see ODO
+
+
         ### TF --> IMPLICIT, compute_gradients method
         grads = self.opt.compute_gradients(self.loss)
         ### TF CLIP_BY_VALUE
@@ -312,19 +340,25 @@ class BaseModel(ABC):
     def _compute_loss(self, logits):
         """Method that calculates the loss function."""
         ### TF.nn SPARSE SOFTMAX CROSS ENTROPY WITH LOGITS
-        crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.shifted_target_seq,
-            logits=logits)
+        #crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        #   labels=self.shifted_target_seq,
+        #  logits=logits)
+
+        crossent = F.cross_entropy(x, target) ### set x = logits, target = self.shifted...
+
         ### TF REDUCE SUM
-        loss = (tf.reduce_sum(crossent * self.target_mask))
+        #loss = (tf.reduce_sum(crossent * self.target_mask))
+        loss = torch.sum(crossent * self.target_mask)
         return loss
 
     def _compute_accuracy(self, prediction):
         """Method that calculates the character-wise translation accuracy."""
         ### TF CAST, EQUAL
-        right_predictions = tf.cast(tf.equal(prediction, self.shifted_target_seq), tf.float32)
+        #right_predictions = tf.cast(tf.equal(prediction, self.shifted_target_seq), tf.float32)
+        right_predictions = torch.eq(prediction, self.shifted_target_seq).double()
         ### TF REDUCE SUM
-        accuracy = (tf.reduce_sum(right_predictions * self.target_mask))
+        #accuracy = (tf.reduce_sum(right_predictions * self.target_mask))
+        accuracy = torch.sum(right_predictions * self.target_mask)
         return accuracy
 
     def train(self, sess):
@@ -337,7 +371,7 @@ class BaseModel(ABC):
         """
         assert self.mode == "TRAIN"
         ### TF SESSION + sess.run alternative required
-        _, step = sess.run([self.train_step, self.global_step])
+        #_, step = sess.run([self.train_step, self.global_step])
         return step
 
     def eval(self, sess):
@@ -364,7 +398,7 @@ class BaseModel(ABC):
                                        self.decode_vocabulary["<s>"]]])
 
     def seq2emb(self, sess, input_seq, input_len):
-        """Method to run a forwards path up to the bottneck layer (ENCODER).
+        """Method to run a forwards path up to the bottleneck layer (ENCODER).
         Encodes a one-hot encoded input sequnce.
 
         Args:
@@ -378,9 +412,10 @@ class BaseModel(ABC):
         ### TF SESSION + sess.run
         return sess.run(self.encoded_seq, {self.input_seq: input_seq,
                                            self.input_len: input_len})
+        ### HERE COME UP WITH model(x) type expression to call encoder.
 
     def emb2seq(self, sess, embedding, num_top, maximum_iterations=1000):
-        """Method to run a forwards path from bottlneck layer to output sequnce (DECODER).
+        """Method to run a forwards path from bottleneck layer to output sequnce (DECODER).
         Decodes the embedding (molecular descriptor) back to a sequnce representaion.
 
         Args:
@@ -409,6 +444,9 @@ class BaseModel(ABC):
         assert self.mode == "TRAIN"
         ### TF SESSION + sess.run
         sess.run(tf.global_variables_initializer())
+        ### HERE CHECK any required init. of pytorch methods
+
+
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
             print('Create save file in: ', self.save_dir)
@@ -426,6 +464,9 @@ class BaseModel(ABC):
             restore_path = self.checkpoint_path
         ### SELF SAVER OP --> .restore
         self.saver_op.restore(sess, restore_path)
+
+        ### Fully replace as neccesary
+
         if self.mode == "TRAIN":
             ### TF SESSION + session.run
             step = sess.run(self.global_step)
@@ -436,6 +477,7 @@ class BaseModel(ABC):
         """Wrapper function save model to file."""
         ### SELF SAVER OP --> .save
         self.saver_op.save(sess, self.checkpoint_path)
+        #torch.save(self.state_dict, '...')
 
 class GRUSeq2Seq(BaseModel):
     """Translation model class with a multi-layer Recurrent Neural Network as Encoder
@@ -467,8 +509,14 @@ class GRUSeq2Seq(BaseModel):
         """Method that defines the encoder part of the translation model graph."""
         ### TF NN RNN_CELL GRU
         encoder_cell = [tf.nn.rnn_cell.GRUCell(size) for size in self.cell_size]
+
+        torch.nn.GRU( ...
+
         ### TF CONTRIB RNN MultiRNNCell < list
         encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
+
+        ### ?? Consider REINVENT class MultiGRU... 
+
         ### TF.nn.dynamic_rnn, NB float
         encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
                                                            encoder_emb_inp,
@@ -480,6 +528,10 @@ class GRUSeq2Seq(BaseModel):
                               self.embedding_size,
                               activation=self.emb_activation
                              )
+
+        ##First def linear1 = Linear().. ,
+        emb = F.???(linear1())
+
         return emb
 
     def _decoder(self, encoded_seq, decoder_emb_inp=None):
@@ -684,7 +736,7 @@ class GRUVAE(GRUSeq2Seq):
 class NoisyGRUSeq2Seq(GRUSeq2Seq):
     """Translation model class with a multi-layer Recurrent Neural Network as Encoder and
     Decoder with Gate Recurrent Units (GRUs) with input dropout and a Gaussian Noise term
-    after the bottlneck layer. Encoder and Decoder architecutre are the same.
+    after the bottleneck layer. Encoder and Decoder architecutre are the same.
 
     Attributes:
         input_dropout: Dropout rate of a Dropout layer after the character embedding of the
@@ -975,16 +1027,16 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
 class NoisyGRUSeq2SeqWithFeatures(GRUSeq2SeqWithFeatures):
     """Translation model class with a multi-layer Recurrent Neural Network as Encoder and Decoder
     with Gate Recurrent Units (GRUs) with input dropout and a Gaussian Noise Term after the
-    bottlneck layer and an additional feature classification task. Encoder and Decoder architecutre
+    bottleneck layer and an additional feature classification task. Encoder and Decoder architecture
     are the same.
 
     Attribures:
         input_dropout: Dropout rate of a Dropout layer after the character embedding of the input
         sequnce.
-        emb_noise: Standard deviation of the Gaussian Noise term after the bottlneck layer.
+        emb_noise: Standard deviation of the Gaussian Noise term after the bottleneck layer.
     """
     def __init__(self, mode, iterator, hparams):
-        """Constructor for the Noisy GRU translation model with feature vlassification class.
+        """Constructor for the Noisy GRU translation model with feature classification class.
 
         Args:
             mode: The mode the model is supposed to run (e.g. Train, EVAL, ENCODE, DECODE).

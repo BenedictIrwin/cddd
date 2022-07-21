@@ -8,6 +8,7 @@ from cddd.model_helper import build_models
 from cddd.evaluation import eval_reconstruct, parallel_eval_qsar
 from cddd.hyperparameters import add_arguments, create_hparams
 
+### TF LOGGING SET VERBOSITY
 tf.logging.set_verbosity(tf.logging.ERROR)
 FLAGS = None
 
@@ -63,5 +64,6 @@ if __name__ == "__main__":
     PARSER = argparse.ArgumentParser()
     add_arguments(PARSER)
     FLAGS, UNPARSED = PARSER.parse_known_args()
+    ### TF APP RUN
     tf.app.run(main=main, argv=[sys.argv[0]] + UNPARSED)
     

@@ -1,4 +1,4 @@
-"""Module to extract contineous data-driven descriptors for a file of SMILES."""
+"""Module to extract continuous data-driven descriptors for a file of SMILES."""
 import os
 import sys
 import argparse
@@ -41,7 +41,7 @@ def add_arguments(parser):
     parser.add_argument('--batch_size', default=512, type=int)
 
 def read_input(file):
-    """Function that read teh provided file into a pandas dataframe.
+    """Function that reads the provided file into a pandas dataframe.
     Args:
         file: File to read.
     Returns:
@@ -59,7 +59,7 @@ def read_input(file):
     return sml_df
 
 def main(unused_argv):
-    """Main function that extracts the contineous data-driven descriptors for a file of SMILES."""
+    """Main function that extracts the continuous data-driven descriptors for a file of SMILES."""
     if FLAGS.gpu:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(FLAGS.device)
     model_dir = FLAGS.model_dir
@@ -96,6 +96,7 @@ def main_wrapper():
     PARSER = argparse.ArgumentParser()
     add_arguments(PARSER)
     FLAGS, UNPARSED = PARSER.parse_known_args()
+    ### TF APP RUN
     tf.app.run(main=main, argv=[sys.argv[0]] + UNPARSED)
     
 if __name__ == "__main__":
