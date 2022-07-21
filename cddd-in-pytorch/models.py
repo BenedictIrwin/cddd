@@ -181,22 +181,24 @@ class BaseModel(ABC):
                     "char_embedding2",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                self.decoder_embedding = torch.tensor(...init, required_grad = True)
             ### NAME SCOPE
-            with tf.name_scope("Input"):
-                ### PLACEHOLDER, float
-                self.encoded_seq = tf.placeholder(tf.float32,
-                                                  [None, self.embedding_size])
-                ### PLACEHOLDER int
-                self.maximum_iterations = tf.placeholder(tf.int32, [])
-                ### PLACEHOLDER int
-                self.maximum_iterations = tf.placeholder(tf.int32, [])
+            #with tf.name_scope("Input"):
+            ### PLACEHOLDER, float
+            self.encoded_seq = tf.placeholder(tf.float32,
+                                              [None, self.embedding_size])
+            ### PLACEHOLDER int
+            self.maximum_iterations = tf.placeholder(tf.int32, [])
+            ### PLACEHOLDER int
+            self.maximum_iterations = tf.placeholder(tf.int32, [])
 
             ### VAR SCOPE
-            with tf.variable_scope("Decoder"):
-                self.output_ids = self._decoder(self.encoded_seq)
+            # with tf.variable_scope("Decoder"):
+            self.output_ids = self._decoder(self.encoded_seq)
 
         ### TF TRAIN SAVER
         self.saver_op = tf.train.Saver()
+        self.saver_op = torch.save ... ## Needs more thought
 
     def _input(self, with_features=False):
         """Method that defines input part of the graph for a translation model instance.
@@ -215,21 +217,24 @@ class BaseModel(ABC):
             mol_features: if Arg with_features is set to True, the molecular features of the
             input pipleine are passed.
         """
-        ### TF DEVICE
+        ### TF DEVICE --> CARE
         with tf.device('/cpu:0'):
             if with_features:
                 seq1, seq2, seq1_len, seq2_len, mol_features = self.iterator.get_next()
             else:
                 seq1, seq2, seq1_len, seq2_len = self.iterator.get_next()
             if self.rand_input_swap:
-                ### TF RANDOM UNIFORM
-                rand_val = tf.random_uniform([], dtype=tf.float32)
+                ### TF RANDOM UNIFORM --> MIGHT BE BETTER REPHRASED with a not?
+                #rand_val = tf.random_uniform([], dtype=tf.float32)
+                rand_val = torch.rand([], dtype = torch.float32)
                 ### TF COND
-                input_seq = tf.cond(tf.greater_equal(rand_val, 0.5),
-                                    lambda: seq1, lambda: seq2)
+                #input_seq = tf.cond(tf.greater_equal(rand_val, 0.5),
+                #                    lambda: seq1, lambda: seq2)
+                input_seq = torch.where(rand_val >= 0.5, seq1, seq2)
                 ### TF COND
-                input_len = tf.cond(tf.greater_equal(rand_val, 0.5),
-                                    lambda: seq1_len, lambda: seq2_len)
+                #input_len = tf.cond(tf.greater_equal(rand_val, 0.5),
+                #                    lambda: seq1_len, lambda: seq2_len)
+                input_len = torch.where(rand_val >= 0.5, seq1_len, seq2_len)
             else:
                 input_seq = seq1
                 input_len = seq1_len
@@ -281,8 +286,12 @@ class BaseModel(ABC):
                 "char_embedding",
                 [self.encode_voc_size, self.char_embedding_size]
             )
+            self.encoder_embedding = torch,tensor(...init, required_grad = True)
+
         ### TF.nn EMBEDDING LOOKUP
-        encoder_emb_inp = tf.nn.embedding_lookup(self.encoder_embedding, input_seq)
+        ## encoder_emb_inp = tf.nn.embedding_lookup(self.encoder_embedding, input_seq)
+        encoder_emb_inp = torch.gather(self.encoder_embedding, ?, input_seq) ## Test this carefully
+
         if self.mode != "ENCODE":
             assert target_seq is not None
             if self.encode_vocabulary == self.decode_vocabulary:
@@ -303,8 +312,10 @@ class BaseModel(ABC):
                     "char_embedding2",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                self.decoder_embedding = torch.tensor(...init, requires_grad = True)
             ## TF nn EMBEDDING LOOKUP
-            decoder_emb_inp = tf.nn.embedding_lookup(self.decoder_embedding, target_seq)
+            #decoder_emb_inp = tf.nn.embedding_lookup(self.decoder_embedding, target_seq)
+            decoder_emb_inp = torch.gather(self.decoderembedding, dim = ? , target_seq)
             return encoder_emb_inp, decoder_emb_inp
         else:
             return encoder_emb_inp
@@ -329,9 +340,9 @@ class BaseModel(ABC):
         #self.opt = tf.train.AdamOptimizer(self.lr, name='optimizer')
         self.opt = torch.optim.Adam(self.parameters(),lr = self.lr)  ### BUT, self.parameters() probably not defined, see ODO
 
-
         ### TF --> IMPLICIT, compute_gradients method
         grads = self.opt.compute_gradients(self.loss)
+
         ### TF CLIP_BY_VALUE
         grads = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads]
         self.train_step = self.opt.apply_gradients(grads, self.global_step)
@@ -353,7 +364,7 @@ class BaseModel(ABC):
         #   labels=self.shifted_target_seq,
         #  logits=logits)
 
-        crossent = F.cross_entropy(x, target) ### set x = logits, target = self.shifted...
+        crossent = F.cross_entropy(logits, self.shifted_target_seq) ### set x = logits, target = self.shifted...
 
         ### TF REDUCE SUM
         #loss = (tf.reduce_sum(crossent * self.target_mask))
@@ -364,7 +375,7 @@ class BaseModel(ABC):
         """Method that calculates the character-wise translation accuracy."""
         ### TF CAST, EQUAL
         #right_predictions = tf.cast(tf.equal(prediction, self.shifted_target_seq), tf.float32)
-        right_predictions = torch.eq(prediction, self.shifted_target_seq).double()
+        right_predictions = torch.eq(prediction, self.shifted_target_seq) ##.double()
         ### TF REDUCE SUM
         #accuracy = (tf.reduce_sum(right_predictions * self.target_mask))
         accuracy = torch.sum(right_predictions * self.target_mask)
@@ -381,6 +392,7 @@ class BaseModel(ABC):
         assert self.mode == "TRAIN"
         ### TF SESSION + sess.run alternative required
         #_, step = sess.run([self.train_step, self.global_step])
+        ???
         return step
 
     def eval(self, sess):
@@ -516,6 +528,9 @@ class GRUSeq2Seq(BaseModel):
         
         ### TORCH LAYERS
 
+
+        self.dense_layer = nn.Linear(<in>,self.embedding_size, device=device)
+
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
         ### TF NN RNN_CELL GRU
@@ -535,13 +550,12 @@ class GRUSeq2Seq(BaseModel):
                                                            dtype=tf.float32,
                                                            time_major=False)
         ### TF LAYERS DENSE, TF CONCAT
-        emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
-                              self.embedding_size,
-                              activation=self.emb_activation
-                             )
+        #emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
+        #                      self.embedding_size,
+        #                      activation=self.emb_activation
+        #                     )
 
-        ##First def linear1 = Linear().. ,
-        emb = F.???(linear1())
+        emb = self.emb_activation(self.dense_layer(torch.cat(encoder_state, dim = 1)))
 
         return emb
 
@@ -609,6 +623,10 @@ class GRUVAE(GRUSeq2Seq):
         self.div_loss_rate = hparams.div_loss_rate
         
         ### TORCH LAYERS
+        self.MultiRNN =
+
+        self.dense_layer_1 = nn.Linear(<in>,self.embedding_size,...)
+        self.dense_layer_2 = nn.Linear(<in>,self.embedding_size,...)
         
     def _encoder(self, encoder_emb_inp):
 
@@ -624,96 +642,111 @@ class GRUVAE(GRUSeq2Seq):
                                                            dtype=tf.float32,
                                                            time_major=False)
         ###
-        loc = tf.layers.dense(tf.concat(encoder_state, axis=1),
-                              self.embedding_size
-                             )
+        #loc = tf.layers.dense(tf.concat(encoder_state, axis=1),
+        #                      self.embedding_size
+        #                     )
+        loc = self.dense_layer_1(torch.cat(encoder_state, dim = 1))
         ###
-        log_scale = tf.layers.dense(tf.concat(encoder_state, axis=1),
-                                self.embedding_size
-                               )
+        #log_scale = tf.layers.dense(tf.concat(encoder_state, axis=1),
+        #                        self.embedding_size
+        #                       )
+        log_scale = self.dense_layer_2(torch.cat(encoder_state, dim = 1))
         return loc, log_scale
     
     def _sampler(self, loc, log_scale):
         ### TF RANDOM NORMAL
-        epsilon = tf.random_normal(
-            ### TF SHAPE
-            shape=[tf.shape(loc)[0], self.embedding_size],
-            mean=0,
-            stddev=1
-        )
+        #epsilon = tf.random_normal(
+        #    ### TF SHAPE
+        #    shape=[tf.shape(loc)[0], self.embedding_size],
+        #    mean=0,
+        #    stddev=1
+        #)
+        epsilon = torch.normal(mean = torch.zeros( loc.size()[0], self.embedding_size), std = 1)
+
         ### TF.EXP
-        return loc + tf.exp(log_scale) * epsilon
+        return loc + torch.exp(log_scale) * epsilon
     
     def _compute_loss(self, logits, loc, log_scale):
         """Method that calculates the loss function."""
-        ###
-        crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-            labels=self.shifted_target_seq,
-            logits=logits)
-        ###
-        crossent = tf.reduce_sum(crossent * self.target_mask, axis=1)
-        ###
-        divergence = -0.5 * tf.reduce_sum(1 + 2*log_scale - tf.square(loc) - tf.square(tf.exp(log_scale)), axis=-1)
-        ###
-        self.measures_to_log["crossent"] = tf.reduce_mean(crossent)
-        ###
-        self.measures_to_log["divergence"] = tf.reduce_mean(divergence)
-        ###
+        ### TF SSCEWL
+        #crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+        #    labels=self.shifted_target_seq,
+        #    logits=logits)
+        crossent = F.crossent(logits, self.shifted_target_seq)  ## Note swapped arguments
+        ### TF REDUCE SUM
+        #crossent = tf.reduce_sum(crossent * self.target_mask, axis=1)
+        crossent = torch.sum( crossent * self.target_mask, dim = 1)
+
+
+        ### DIVERGENCE
+        #divergence = -0.5 * tf.reduce_sum(1 + 2*log_scale - tf.square(loc) - tf.square(tf.exp(log_scale)), axis=-1)
+        divergence = -0.5 * torch.sum(1 + 2*log_scale - torch.square(loc) - torch.square(torch.exp(log_scale)), dim = -1) ## Check dim = -1 behaviour
+
+        ### TF REDUCE MEAN
+        #self.measures_to_log["crossent"] = tf.reduce_mean(crossent)
+        self.measures_to_log["crossent"] = torch.mean(crossent)
+        ### TF REDUCE MEAN
+        #self.measures_to_log["divergence"] = tf.reduce_mean(divergence)
+        self.measures_to_log["divergence"] = torch.mean(divergence)
+        
+        ### TF TRAIN EXPONENTIAL DECAY (figure out reshuffle of lr)
         div_loss_scale = self.div_loss_scale - tf.train.exponential_decay(self.div_loss_scale,
                                                  self.global_step,
                                                  10000,
                                                  self.div_loss_rate,
                                                  staircase=True,)
-        
+        ###
+
         self.measures_to_log["div_loss_scale"] = div_loss_scale
         ###
-        return tf.reduce_mean(crossent + div_loss_scale * divergence)
+        #return tf.reduce_mean(crossent + div_loss_scale * divergence)
+        return torch.mean(crossent + div_loss_scale * divergence)
     
     def build_graph(self):
         """Method that defines the graph for a translation model instance."""
         if self.mode in ["TRAIN", "EVAL"]:
             ###
-            with tf.name_scope("Input"):
-                (self.input_seq,
-                 self.shifted_target_seq,
-                 self.input_len,
-                 self.shifted_target_len,
-                 self.target_mask,
-                 encoder_emb_inp,
-                 decoder_emb_inp) = self._input()
+            #with tf.name_scope("Input"):
+            (self.input_seq,
+            self.shifted_target_seq,
+            self.input_len,
+            self.shifted_target_len,
+            self.target_mask,
+            encoder_emb_inp,
+            decoder_emb_inp) = self._input()
             ###
-            with tf.variable_scope("Encoder"):
-                loc, log_scale = self._encoder(encoder_emb_inp)
-                encoded_seq = self._sampler(loc, log_scale)
+            #with tf.variable_scope("Encoder"):
+            loc, log_scale = self._encoder(encoder_emb_inp)
+            encoded_seq = self._sampler(loc, log_scale)
             ###
-            with tf.variable_scope("Decoder"):
-                logits = self._decoder(encoded_seq, decoder_emb_inp)
+            #with tf.variable_scope("Decoder"):
+            logits = self._decoder(encoded_seq, decoder_emb_inp)
                 ### TF ARGMAX
                 ### self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
-                self.prediction = torch.argmax(logits, dim=2)
+            self.prediction = torch.argmax(logits, dim=2)
             ###
-            with tf.name_scope("Measures"):
-                #rossent, divergence, self.loss = self._compute_loss(logits, posterior)
-                self.loss = self._compute_loss(logits, loc, log_scale)
-                self.accuracy = self._compute_accuracy(self.prediction)
-                self.measures_to_log["loss"] = self.loss
-                self.measures_to_log["accuracy"] = self.accuracy
+            #with tf.name_scope("Measures"):
+                #crossent, divergence, self.loss = self._compute_loss(logits, posterior)
+            self.loss = self._compute_loss(logits, loc, log_scale)
+            self.accuracy = self._compute_accuracy(self.prediction)
+            self.measures_to_log["loss"] = self.loss
+            self.measures_to_log["accuracy"] = self.accuracy
 
             if self.mode == "TRAIN":
                 ###
-                with tf.name_scope("Training"):
-                    self._training()
+                #with tf.name_scope("Training"):
+                self._training()
 
         if self.mode == "ENCODE":
             ###
-            with tf.name_scope("Input"):
-                self.input_seq = tf.placeholder(tf.int32, [None, None])
-                self.input_len = tf.placeholder(tf.int32, [None])
-                encoder_emb_inp = self._emb_lookup(self.input_seq)
+            #with tf.name_scope("Input"):
+            self.input_seq = tf.placeholder(tf.int32, [None, None])
+            self.input_len = tf.placeholder(tf.int32, [None])
+            encoder_emb_inp = self._emb_lookup(self.input_seq)
             ###
-            with tf.variable_scope("Encoder"):
-                loc, log_scale = self._encoder(encoder_emb_inp)
-                self.encoded_seq = self._sampler(loc, log_scale)
+            #with tf.variable_scope("Encoder"):
+            loc, log_scale = self._encoder(encoder_emb_inp)
+            self.encoded_seq = self._sampler(loc, log_scale)
 
         if self.mode == "DECODE":
             if self.one_hot_embedding:
@@ -728,28 +761,31 @@ class GRUVAE(GRUSeq2Seq):
                 )
             elif self.encode_vocabulary == self.decode_vocabulary:
                 ### TF GET VAR
-                self.decoder_embedding = tf.get_variable(
-                    "char_embedding",
-                    [self.decode_voc_size, self.char_embedding_size]
-                )
+                #self.decoder_embedding = tf.get_variable(
+                #    "char_embedding",
+                #    [self.decode_voc_size, self.char_embedding_size]
+                #)
+                self.decoder_embedding = torch.tensor(...init, requires_grad = True)
             else:
                 ### TF GET VAR
                 self.decoder_embedding = tf.get_variable(
                     "char_embedding2",
                     [self.decode_voc_size, self.char_embedding_size]
                 )
+                self.decoder_embedding = torch.tensor(...init, requires_grad = True)
 
-            with tf.name_scope("Input"):
-                ### TF PLACEHOLDER
-                self.encoded_seq = tf.placeholder(tf.float32,
+            #with tf.name_scope("Input"):
+            ### TF PLACEHOLDER
+            self.encoded_seq = tf.placeholder(tf.float32,
                                                   [None, self.embedding_size])
 
             ### TF VAR SCOPE
-            with tf.variable_scope("Decoder"):
-                self.output_ids = self._decoder(self.encoded_seq)
+            #with tf.variable_scope("Decoder"):
+            self.output_ids = self._decoder(self.encoded_seq)
 
         ### TF.train.SAVER
         self.saver_op = tf.train.Saver()
+        self.saver_op = torch.save() ### Needs more thought
 
 class NoisyGRUSeq2Seq(GRUSeq2Seq):
     """Translation model class with a multi-layer Recurrent Neural Network as Encoder and
@@ -780,29 +816,43 @@ class NoisyGRUSeq2Seq(GRUSeq2Seq):
         self.emb_noise = hparams.emb_noise
         
         ### TORCH LAYERS
+        self.dropout_layer = 
+        self.dense_layer = nn.Linear(<in>,self.embedding_size,...) 
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
         if (self.mode == "TRAIN") & (self.input_dropout > 0.0):
-            max_time = tf.shape(encoder_emb_inp)[1]
+            ### TF.shape
+            #max_time = tf.shape(encoder_emb_inp)[1]
+            max_time = torch.size(encoder_emb_inp)[1]
+            ### TF DROPOUT LAYER
             encoder_emb_inp = tf.nn.dropout(encoder_emb_inp,
                                             1. - self.input_dropout,
                                             noise_shape=[self.batch_size, max_time, 1])
+        
+        ### TF GRU CELL
         encoder_cell = [tf.nn.rnn_cell.GRUCell(size) for size in self.cell_size]
+        ### TF MULTI RNN
         encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
+        ### TF DYNAMIC RNN
         encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
                                                            encoder_emb_inp,
                                                            sequence_length=self.input_len,
                                                            dtype=tf.float32,
                                                            time_major=False)
-        emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
-                              self.embedding_size
-                             )
+        ### TF DENSE
+        #emb = tf.layers.dense(tf.concat(encoder_state, axis=1),
+        #                      self.embedding_size
+        #                     )
+        emb = self.dense_layer(torch.cat(encoder_state, dim = 1))
+
         if (self.mode == "TRAIN") & (self.emb_noise > 0.0):
-            emb += tf.random_normal(shape=tf.shape(emb),
-                                    mean=0.0,
-                                    stddev=self.emb_noise,
-                                    dtype=tf.float32)
+            ### TF RANDOM NORMAL
+            #emb += tf.random_normal(shape=tf.shape(emb),
+            #                        mean=0.0,
+            #                        stddev=self.emb_noise,
+            #                        dtype=tf.float32)
+            emb += torch.normal(mean = torch.zeros(torch.size(emb)), std = self.emb_noise)
         emb = self.emb_activation(emb)
         return emb
 
@@ -831,45 +881,78 @@ class LSTMSeq2Seq(BaseModel):
         self.cell_size = hparams.cell_size
         
         ### TORCH LAYERS
+        self.encoder_LSTM = torch.nn.LSTM(input_size = , hidden_size =, num_layers =)
+        self.decoder_LSTM = torch.nn.LSTM(input_size = , hidden_size =, num_layers =)
+
+        self.encoder_dense_layer = nn.Linear(<in>,self.embedding_size)
+
+        self.decoder_projection = nn.Linear(<in>, self.decode_voc_size, use_boa = False)
+
 
     def _encoder(self, encoder_emb_inp):
         """Method that defines the encoder part of the translation model graph."""
-        encoder_cell = [tf.nn.rnn_cell.LSTMCell(size) for size in self.cell_size]
-        encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
-        encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
-                                                           encoder_emb_inp,
-                                                           sequence_length=self.input_len,
-                                                           dtype=tf.float32,
-                                                           time_major=False)
-        encoder_state_c = [state.c for state in encoder_state]
-        emb = tf.layers.dense(tf.concat(encoder_state_c, axis=1),
-                              self.embedding_size,
-                              activation=self.emb_activation
-                             )
+        ### TF LSTM/MULTIRNNN
+        #encoder_cell = [tf.nn.rnn_cell.LSTMCell(size) for size in self.cell_size]
+        #encoder_cell = tf.contrib.rnn.MultiRNNCell(encoder_cell)
+        #encoder_outputs, encoder_state = tf.nn.dynamic_rnn(encoder_cell,
+        #                                                   encoder_emb_inp,
+        #                                                   sequence_length=self.input_len,
+        #                                                   dtype=tf.float32,
+        #                                                   time_major=False)   ### thus IN/OUT shape = [batch_size, max_time, depth]
+        #encoder_state_c = [state.c for state in encoder_state]
+
+        ### EXAMPLE TORCH
+        #>>> rnn = nn.LSTM(10, 20, 2)
+        #>>> input = torch.randn(5, 3, 10)
+        #>>> h0 = torch.randn(2, 3, 20)
+        #>>> c0 = torch.randn(2, 3, 20)
+        #>>> output, (hn, cn) = rnn(input, (h0, c0))
+        h0 = 
+        c0 =
+        encoder_outputs, encoder_state = self.encoder_LSTM(encoder_emb_inp, (h0, c0))
+        encoder_state_c = encoder_state[1]
+        ### TF DENSE LAYER
+        #emb = tf.layers.dense(tf.concat(encoder_state_c, axis=1),
+        #                      self.embedding_size,
+        #                      activation=self.emb_activation
+        #                     )
+        emb = self.emb_activation(self.encoder_dense_layer(torch.cat(encoder_state_c, dim = 1)))
         return emb
 
     def _decoder(self, encoded_seq, decoder_emb_inp=None):
         """Method that defines the decoder part of the translation model graph."""
+        ### TF LSTM/MULTIRNN
         decoder_cell = [tf.nn.rnn_cell.LSTMCell(size) for size in self.cell_size]
         decoder_cell = tf.contrib.rnn.MultiRNNCell(decoder_cell)
+
+        ### TF DENSE LAYER
         initial_state_c_full = tf.layers.dense(encoded_seq, sum(self.cell_size))
+        ### TF SPLIT
         initial_state_c = tuple(tf.split(initial_state_c_full, self.cell_size, 1))
+        ### TF ZEROS LIKE
         initial_state_h_full = tf.zeros_like(initial_state_c_full)
+        ### TF SPLIT
         initial_state_h = tuple(tf.split(initial_state_h_full, self.cell_size, 1))
+        ### LSTM
         decoder_cell_inital = tuple(
             [tf.contrib.rnn.LSTMStateTuple(
                 initial_state_c[i],
                 initial_state_h[i]) for i in range(len(self.cell_size))
             ]
         )
+        ### TF TRAINING HELPER
         helper = tf.contrib.seq2seq.TrainingHelper(decoder_emb_inp,
                                                    sequence_length=self.shifted_target_len,
                                                    time_major=False)
+        ### TF DENSE 'projection_layer'
         projection_layer = tf.layers.Dense(self.decode_voc_size, use_bias=False)
+        ## CHECK HOW THIS WORKS WITH THE OTHERSprojection_layer = self.decoder_projection(...) ##
+        ### TF DECODER
         decoder = tf.contrib.seq2seq.BasicDecoder(decoder_cell,
                                                   helper,
                                                   decoder_cell_inital,
                                                   output_layer=projection_layer)
+        ### TF DYNAMIC DECODER
         outputs, output_state, _ = tf.contrib.seq2seq.dynamic_decode(decoder,
                                                                      impute_finished=True,
                                                                      output_time_major=False)
@@ -879,7 +962,7 @@ class Conv2GRUSeq2Seq(GRUSeq2Seq):
     """Translation model class with a multi-layer 1-D Convolutional Neural Network as Encoder.
     The Decoder is still a RNN with GRU cells.
 
-    Attribures:
+    Attributes:
         conv_hidden_size: List defining the number of filters in each layer.
         kernel_size: List defining the width of the 1-D conv-filters in each layer.
     """
@@ -887,13 +970,13 @@ class Conv2GRUSeq2Seq(GRUSeq2Seq):
         """Constructor for the Convolutional translation model class.
 
         Args:
-            mode: The mode the model is supposed to run (e.g. Train, EVAL, ENCODE, DECODE).
+            mode: The mode the model is supposed to run (e.g. TRAIN, EVAL, ENCODE, DECODE).
             iterator: The iterator of the input pipeline.
             hparams: Hyperparameters defined in file or flags.
         Returns:
             None
         Raises:
-            ValueError: if mode is not Train, EVAL, ENCODE, DECODE
+            ValueError: if mode is not TRAIN, EVAL, ENCODE, DECODE
             ValueError: if emb_activation is not tanh or linear
         """
         super().__init__(mode, iterator, hparams)
@@ -904,7 +987,7 @@ class Conv2GRUSeq2Seq(GRUSeq2Seq):
         encoder_conv1d = {}
         encoder_max_pool = {}
         for i, size in enumerate(self.conv_hidden_size):
-            encoder_conv1d[i] = torch.
+            encoder_conv1d[i] = nn.Conv1d(<in>,<out>,self.kernel_size[i],padding_mode = 'SAME')
             encoder_max_pool[i] = torch.
         encoder[i??+1] = torch.
 
@@ -966,6 +1049,9 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
         self.num_features = hparams.num_features
         
         ### TORCH LAYERS
+        self.feature_regression_dense_1 = nn.Linear(<in>,512,...)
+        self.feature_regression_dense_2 = nn.Linear(512,128,...)
+        self.feature_regression_dense_2 = nn.Linear(128,self.num_features,...)
 
     def build_graph(self):
         """Method that defines the graph for a translation model instance with the additional
@@ -1017,8 +1103,8 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
             self.input_len = tf.placeholder(tf.int32, [None])
             encoder_emb_inp = self._emb_lookup(self.input_seq)
 
-            with tf.variable_scope("Encoder"):
-                self.encoded_seq = self._encoder(encoder_emb_inp)
+            #with tf.variable_scope("Encoder"):
+            self.encoded_seq = self._encoder(encoder_emb_inp)
 
         if self.mode == "DECODE":
             if self.one_hot_embedding:
@@ -1065,21 +1151,23 @@ class GRUSeq2SeqWithFeatures(GRUSeq2Seq):
     def _feature_regression(self, encoded_seq):
         """Method that defines the feature classification part of the graph."""
         ## TF LAYERS DENSE
-        x = tf.layers.dense(inputs=encoded_seq,
-                            units=512,
-                            activation=tf.nn.relu
-                            )
+        #x = tf.layers.dense(inputs=encoded_seq,
+        #                    units=512,
+        #                    activation=tf.nn.relu
+        #                    )
         ## TF LAYERS DENSE
-        x = tf.layers.dense(inputs=x,
-                            units=128,
-                            activation=tf.nn.relu
-                            )
+        #x = tf.layers.dense(inputs=x,
+        #                    units=128,
+        #                    activation=tf.nn.relu
+        #                    )
         ## TF LAYERS DENSE
-        x = tf.layers.dense(inputs=x,
-                            units=self.num_features,
-                            activation=None
-                            )
-
+        #x = tf.layers.dense(inputs=x,
+        #                    units=self.num_features,
+        #                    activation=None
+        #                    )
+        x = F.relu(self.feature_regression_dense_1(encoded_seq))
+        x = F.relu(self.feature_regression_dense_2(x))
+        x = self.feature_regression_dense_2(x)
         return x
 
     def _compute_loss(self, sequence_logits, features_predictions):
