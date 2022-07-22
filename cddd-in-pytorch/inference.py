@@ -122,6 +122,7 @@ class InferenceModel(object):
         if self.use_gpu:
             emb = sequence2embedding(self.encode_model, self.hparams, seq)
         else:
+            ### TF DEVICE
             with tf.device("/cpu:0"):
                 emb = sequence2embedding(self.encode_model, self.hparams, seq)
         return emb
@@ -140,6 +141,7 @@ class InferenceModel(object):
         if self.use_gpu:
             seq = embedding2sequence(self.decode_model, self.hparams, embedding, self.num_top, self.maximum_iterations)
         else:
+            ### TF DEVICE
             with tf.device("/cpu:0"):
                 seq = embedding2sequence(self.decode_model, self.hparams, embedding, self.num_top, self.maximum_iterations)
         if len(seq) == 1:

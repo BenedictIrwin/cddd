@@ -1,4 +1,4 @@
-"""Helper functions that build the translation model with a corroponding graph and session."""
+"""Helper functions that build the translation model with a corresponding graph and session."""
 from collections import namedtuple
 import tensorflow as tf
 from cddd import models
@@ -10,7 +10,7 @@ def build_models(hparams, modes=["TRAIN", "EVAL", "ENCODE"]):
 
     Args:
         hparams: Hyperparameters defined in file or flags.
-        modes: The mode the model is supposed to run (e.g. Train, EVAL, ENCODE, DECODE).
+        modes: The mode the model is supposed to run (e.g. TRAIN, EVAL, ENCODE, DECODE).
         Can be a list if multiple models should be build.
     Returns:
         One model or a list of multiple models.
@@ -32,20 +32,23 @@ def create_model(mode, model_creator, input_pipeline_creator, hparams):
     """Helper function to build a translation model for a certain mode.
 
     Args:cpu_threads
-        mode: The mode the model is supposed to run(e.g. Train, EVAL, ENCODE, DECODE).
+        mode: The mode the model is supposed to run(e.g. TRAIN, EVAL, ENCODE, DECODE).
         model_creator: Type of model class (e.g. NoisyGRUSeq2SeqWithFeatures).
         input_pipeline_creator: Type of input pipeline class (e.g. InputPipelineWithFeatures).
         hparams: Hyperparameters defined in file or flags.
     Returns:
         One model as named tuple with a graph, model and session object.
     """
+    ### TF CONFIG PROTO
     sess_config = tf.ConfigProto(allow_soft_placement=hparams.allow_soft_placement,
                                  gpu_options=tf.GPUOptions(
                                      per_process_gpu_memory_fraction=hparams.gpu_mem_frac
                                  ),
                                  inter_op_parallelism_threads=hparams.cpu_threads,
                                  intra_op_parallelism_threads=hparams.cpu_threads)
+    ### TF RESET DEFAULT GRAPH
     tf.reset_default_graph()
+    ### TF GRAPH
     graph = tf.Graph()
     with graph.as_default():
         if mode in ["TRAIN", "EVAL"]:
@@ -59,5 +62,6 @@ def create_model(mode, model_creator, input_pipeline_creator, hparams):
                               hparams=hparams
                              )
         model.build_graph()
+        ### TF SESSION
         sess = tf.Session(graph=graph, config=sess_config)
     return Model(graph=graph, model=model, sess=sess)

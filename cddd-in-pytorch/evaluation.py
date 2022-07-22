@@ -177,6 +177,7 @@ def eval_reconstruct(model, step, hparams):
     while True:
         try:
             measures.append(model.model.eval(model.sess))
+        ### TF ERROR
         except tf.errors.OutOfRangeError:
             break
     fields.extend(np.mean(measures, axis=0).tolist())

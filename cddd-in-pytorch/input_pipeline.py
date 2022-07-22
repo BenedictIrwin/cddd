@@ -11,7 +11,7 @@ class InputPipeline():
     for training the translation model.
 
     Atributes:
-        mode: The mode the model is supposed to run (e.g. Train).
+        mode: The mode the model is supposed to run (e.g. TRAIN).
         batch_size: Number of samples per batch.
         buffer_size: Number of samples in the shuffle buffer.
         input_sequence_key: Identifier of the input_sequence feature in the
@@ -28,15 +28,15 @@ class InputPipeline():
         same bucket.
         max_bucket_lenght: All sequnces above this legth are put in the
         same bucket.
-        regex_pattern_input: Expression to toeknize the input sequnce with.
-        regex_pattern_output: Expression to toeknize the output sequnce with.
+        regex_pattern_input: Expression to tokenize the input sequnce with.
+        regex_pattern_output: Expression to tokenize the output sequnce with.
     """
 
     def __init__(self, mode, hparams):
         """Constructor for base input pipeline class.
 
         Args:
-            mode: The mode the model is supposed to run (e.g. Train).
+            mode: The mode the model is supposed to run (e.g. TRAIN).
             hparams: Hyperparameters defined in file or flags.
         Returns:
             None
@@ -75,16 +75,19 @@ class InputPipeline():
 
     def make_dataset_and_iterator(self):
         """Method that builds a TFRecordDataset and creates a iterator."""
+        ### TF RECORD DATASET
         self.dataset = tf.data.TFRecordDataset(self.file)
         if self.mode == "TRAIN":
             self.dataset = self.dataset.repeat()
         self.dataset = self.dataset.map(self._parse_element, num_parallel_calls=32)
         self.dataset = self.dataset.map(
+            ### TF PY_FUNC
             lambda element: tf.py_func(self._process_element,
                                        [element[self.input_sequence_key],
                                         element[self.output_sequence_key]],
                                        [tf.int32, tf.int32, tf.int32, tf.int32]),
             num_parallel_calls=32)
+        ### TF CONTRIB DATA GROUP BY WINDOW
         self.dataset = self.dataset.apply(tf.contrib.data.group_by_window(
             key_func=lambda in_seq, out_seq, in_len, out_len: self._length_bucket(in_len),
             reduce_func=lambda key, ds: self._pad_batch(
@@ -101,9 +104,11 @@ class InputPipeline():
 
     def _parse_element(self, example_proto):
         """Method that parses an element from a tf-record file."""
+        ## TF FIXEDLENFEATURE + TF STRING
         feature_dict = {self.input_sequence_key: tf.FixedLenFeature([], tf.string),
                         self.output_sequence_key: tf.FixedLenFeature([], tf.string),
                         }
+        ## TF PARSE SINGLE EXAMPLE
         parsed_features = tf.parse_single_example(example_proto, feature_dict)
         element = {name: parsed_features[name] for name in list(feature_dict.keys())}
         return element
@@ -173,7 +178,9 @@ class InputPipeline():
         Returns:
             ID of the assigned bucket.
         """
+        ### TF CAST
         length = tf.cast(length, tf.float32)
+        ### TF CAST
         num_buckets = tf.cast(self.num_buckets, tf.float32)
         cast_value = (self.max_bucket_lenght - self.min_bucket_lenght) / num_buckets
         minimum = self.min_bucket_lenght / cast_value
