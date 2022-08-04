@@ -109,6 +109,7 @@ class MiniCDDDDecoder(torch.nn.Module):
   def __init__(self):
     super().__init__()
 
+    self.voc_emb_size = 32
     self.voc_size = 40
     self.gru_layer_sizes = [512, 1024, 2048]
     self.latent_size = 512
@@ -126,10 +127,9 @@ class MiniCDDDDecoder(torch.nn.Module):
     ## Projection Layer that maps the final GRU output to token logits
     self.decoder_dense = nn.Linear( self.gru_layer_sizes[-1] , self.voc_size, bias = False)
     with torch.no_grad():
-      self.decoder_dense.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-decoder-dense-kernel.npy")).float()) ## [2048, 40]
+      self.decoder_dense.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-decoder-dense-kernel.npy").T).float()) ## [2048, 40]
 
-    ## decoder_embedding : likely uses the same weights as the encoder embedding?
-    #self.encoder_embedding = nn.Embedding(40, 32)
+    ## decoder_embedding : uses the same weights as the encoder embedding
     pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
     self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
 
@@ -143,53 +143,37 @@ class MiniCDDDDecoder(torch.nn.Module):
       self.dense_layer.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-kernel.npy").T).float()) # [512, 3584 = 512 + 1024 + 2048]
       self.dense_layer.bias = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-bias.npy")).float()) # [3584]
 
+    vocab_file = "cddd/data/indices_char.npy"
+    self.decode_vocabulary = { v: k for k, v in np.load(vocab_file, allow_pickle=True).item().items() }
+    self.decode_vocabulary_inv = { k: v for k, v in np.load(vocab_file, allow_pickle=True).item().items() }
+
   def forward(self, input_vecs):
 
-    ### input_vecs through self.dense_layer to get size 512 + 1024 + 2048
-    y = self.dense_layer(input_vecs)
-    h0 = [ y[:512], y[512:512+1024], y[512+1024:] ]   ### ASSUMES ORDER!!!!
+    y = torch.from_numpy(input_vecs).float()
+    y = self.dense_layer(y)
+    h0 = [y[:,:512], y[:,512:512+1024], y[:,512+1024:]]
 
-    x = one_hot(["39"])
-    print(x)
+    ### Or do [39] * batch_size?
+    x = np.array([39,39,39,39,39,39])
+    x = torch.from_numpy(x).int()
     x = self.encoder_embedding(x) ## x is length 32 using character encoding
-    
-    output_string = ""
-    for <condition, i.e. stop when "</s>" is seen>:
-      #h_new = [0,0,0]
-      #x = h_new[0] = gru_0(x, h0[0]) ### x is now size 512
-      #x = h_new[1] = gru_1(x, h0[1]) ### x is now size 1024
-      #x = h_new[2] = gru_2(x, h0[2]) ### x is now size 2048
-      ???, ??? = self.decoder_GRU(x, h0)
-      logits = self.decoder_dense(x)  ### Taking from 2048 to [logits in 40]
-      probs = torch.argmax(logits)  ### one hot in 40
-      choose_character, or just use probabilities as above to generate?
-      x = self.encoder_embedding(something?)
-
-    ## Take the h_new as h0, and concat the token to string, but also take that as the next input?
-
-    #self.decode_vocabulary === dict maps chars to numbers ---> GET from cddd
-
-    #string = ""
-    #start_tokens = ['<s>'] === '39' ? or a batch
-    #end_token = '</s>' === '0' ?
-
-    #start tokens -> to tensor, type int32
-    #end token -> to tensor type int32
-
-    #self._start_inputs = self._embedding_fn(self._start_tokens)
-
-    ### Look for tf.contrib.seq2seq.BeamSearchDecoder(cell = GRU,)
-
-    ### Look for tf.contrib.seq2seq.dynamic_decode()
-    #for ...
-    #  logits = self.decoder_GRU(seq, decoder_emb_inp)   #### logits will be of length [40]
-    #  probs = torch.argmax(logits, dim).int()  #### This will end up being one-hot [ ... 0, 0, 1, 0, 0 ...]
-
-      ### argmax ids' -> embedding_lookup
-
-    #  token = ...
-    #  string.append(token)
-
+   
+    for i in range(len(x)):
+      output_string = "<s>"
+      last_argmax = 39 ## I.e. start char
+      count = 0
+      xx, hh = x[i], [ h0[0][i], h0[1][i], h0[2][i]]
+      while last_argmax != 0 and count < 50:
+        output, hh = self.decoder_GRU(xx, hh)
+        logits = self.decoder_dense(output)  ### Taking from 2048 to [logits in 40]
+        probs = torch.argmax(logits)  ### one hot in 40
+        last_argmax = int(probs.detach().numpy()) 
+        token = self.decode_vocabulary_inv[last_argmax]
+        output_string += token
+        xx = self.encoder_embedding(probs)
+        count += 1
+      print(output_string)
+    exit()
 
 
 ### Some examples
