@@ -35,12 +35,18 @@ def train_loop(train_model, eval_model, encoder_model, hparams):
     with open(hparams_file_name, 'w') as outfile:
         json.dump(hparams.to_json(), outfile)
     while step < hparams.num_steps:
+        ### IMPLICIT TF GRAPH
         with train_model.graph.as_default():
+            ### IMPLICIT TF SESSION
             step = train_model.model.train(train_model.sess)
         if step % hparams.summary_freq == 0:
+            ### IMPLICIT TF GRAPH
             with train_model.graph.as_default():
+                ### IMPLICIT TF SESSION
                 train_model.model.save(train_model.sess)
+            ### IMPLICIT TF GRAPH
             with eval_model.graph.as_default():
+                ### IMPLICIT TF SESSION
                 eval_model.model.restore(eval_model.sess)
                 eval_model.sess.run(eval_model.model.iterator.initializer)
                 eval_reconstruct(eval_model, step, hparams)
@@ -53,7 +59,7 @@ def train_loop(train_model, eval_model, encoder_model, hparams):
         process.join()
 
 def main(unused_argv):
-    """Main function that trains and evaluats the translation model"""
+    """Main function that trains and evaluates the translation model"""
     hparams = create_hparams(FLAGS)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(hparams.device)
     train_model, eval_model, encode_model = build_models(hparams)

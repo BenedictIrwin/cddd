@@ -5,28 +5,194 @@ from abc import ABC, abstractmethod
 import numpy as np
 import tensorflow as tf
 
+
 import torch
+from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
+
+from .utils import Variable
+
+class MultiGRU(nn.Module):
+  """ Implements a three layer GRU cell including an embedding layer
+  and an output linear layer back to the size of the vocabulary"""
+  def __init__(self, voc_size, latent_vec_size):
+    super(MultiGRU, self).__init__()
+    self.embedding = nn.Embedding(voc_size, 128)
+    self.gru_1 = nn.GRUCell(128, latent_vec_size)
+    self.gru_2 = nn.GRUCell(latent_vec_size, latent_vec_size)
+    self.gru_3 = nn.GRUCell(latent_vec_size, latent_vec_size)
+    self.linear = nn.Linear(latent_vec_size, voc_size)
+  
+  def forward(self, x, h):
+    x = self.embedding(x)
+    h_out = Variable(torch.zeros(h.size()))
+    x = h_out[0] = self.gru_1(x, h[0])
+    x = h_out[1] = self.gru_2(x, h[1])
+    x = h_out[2] = self.gru_3(x, h[2])
+    x = self.linear(x)
+  return x, h_out
+
+  def init_h(self, batch_size, latent_vectors):
+    # Initial cell state is zero
+    #x = Variable(torch.zeros(3, batch_size, 330))
+    if len(latent_vectors) < 330: !!!!!
+      scale_net = math.ceil(330/len(latent_vectors))
+      latent_vectors = latent_vectors.repeat(1, scale_net)
+    return Variable(latent_vectors.repeat(3, 1, 1))
+
+class GRUSeq2Seq2(nn.Module):
+  """
+  Simple torch class.
+  """
+  def __init__(self, voc, latent_vec_size):
+    self.rnn = MultiGRU(voc.vocab_size, latent_vec_size)
+    if torch.cuda.ius_available():
+      self.rnn.cuda()
+    self.voc = voc
+
+  def forward(self, x):
+    if not self.training:
+      x = torch.from_numpy(x).float()
+      x = Variable(x.cuda())
+    ???
+
+  def train_network(self, loader):
+    optimizer = torch.optim.Adam(self.parameters(), lr=0.001)
+    loss_func = torch.nn. ... .cuda()
+    scheduler = torch.optim.lr_scheduler. ...
+    for epoch in range (0,20):
+      total_loss = 0.0
+      for step, (x, y) in tqdm( enumerate(loader), total = len(loader)):
+        prediction = self(x)
+        loss = loss_func(prediction, y) ---> self.liklihood?
+        optimizer.zero_grad()
+        loss.backward()
+        total_loss += float(loss)
+      scheduler.step(total_loss)
+      print('Loss = {}'.format(total_loss))
+
+  def save_checkpoint(self):
+    torch.save(self.state_dict(), './net.ckpt')
+
+  def likelihood(self, target, latent_vectors):
+    """
+    Retrieves the likelihood of a given sequence
+    
+    Args:
+    target: (batch_size * sequence_length) A batch of sequences
+    latent_vectors: (batch_size * vector_length) A batch of vectors
+    Outputs:
+    log_probs : (batch_size) Log likelihood for each example*
+    entropy: (batch_size) The entropies for the sequences. Not
+    currently used.
+    """
+    batch_size, seq_length = target.size()
+    start_token = Variable(torch.zeros(batch_size, 1).long())
+    start_token[:] = self.voc.vocab['GO']
+    x = torch.cat((start_token, target[:, :-1]), 1)
+    h = self.rnn.init_h(batch_size, latent_vectors)
+    
+    log_probs = Variable(torch.zeros(batch_size))
+    entropy = Variable(torch.zeros(batch_size))
+    for step in range(seq_length):
+      logits, h = self.rnn(x[:, step], h)
+      log_prob = F.log_softmax(logits)
+      prob = F.softmax(logits)
+      log_probs += NLLLoss(log_prob, target[:, step])
+      entropy += -torch.sum((log_prob * prob), 1)
+    return log_probs, entropy
+
+
+def sample(self, batch_size, latent_vectors, max_length=140):
+  """
+  Sample a batch of sequences
+  
+  Args:
+  batch_size : Number of sequences to sample
+  max_length:  Maximum length of the sequences
+  
+  Outputs:
+  seqs: (batch_size, seq_length) The sampled sequences.
+  log_probs : (batch_size) Log likelihood for each sequence.
+  entropy: (batch_size) The entropies for the sequences. Not
+  currently used.
+  """
+  
+  start_token = Variable(torch.zeros(batch_size).long())
+  start_token[:] = self.voc.vocab['GO']
+  h = self.rnn.init_h(batch_size, latent_vectors)
+  x = start_token
+  
+  sequences = []
+  log_probs = Variable(torch.zeros(batch_size))
+  finished = torch.zeros(batch_size).byte()
+  entropy = Variable(torch.zeros(batch_size))
+  if torch.cuda.is_available():
+    finished = finished.cuda()
+  
+  for step in range(max_length):
+    logits, h = self.rnn(x, h) # implicitly calling forward
+    #print(logits.size())
+    prob = F.softmax(logits, dim=1)
+    log_prob = F.log_softmax(logits, dim=1)
+    x = torch.multinomial(prob, num_samples=1).view(-1)
+    sequences.append(x.view(-1, 1))
+    log_probs += NLLLoss(log_prob, x)
+    entropy += -torch.sum((log_prob * prob), 1)
+  
+    x = Variable(x.data)
+    EOS_sampled = (x == self.voc.vocab['EOS']).data
+    finished = torch.ge(finished + EOS_sampled, 1)
+    if torch.prod(finished) == 1: break
+  
+  sequences = torch.cat(sequences, 1)
+  
+  return sequences.data, log_probs, entropy
+
+def NLLLoss(inputs, targets):
+  """
+  Custom Negative Log Likelihood loss that returns loss per example,
+  rather than for the entire batch.
+  
+  Args:
+  inputs : (batch_size, num_classes) *Log probabilities of each class*
+  targets: (batch_size) *Target class index*
+  
+  Outputs:
+  loss : (batch_size) *Loss for each example*
+  """
+  
+  if torch.cuda.is_available():
+    target_expanded = torch.zeros(inputs.size()).cuda()
+  else:
+    target_expanded = torch.zeros(inputs.size())
+  
+  target_expanded.scatter_(1, targets.contiguous().view(-1, 1).data, 1.0)
+  loss = Variable(target_expanded) * inputs
+  loss = torch.sum(loss, 1)
+  return loss
+
 
 class BaseModel(ABC):
     """
     This is the base class for the translation model. Child class defines encode and decode
     architecture.
 
-    Attribures:
+    Attributes:
         mode: The mode the model is supposed to run (e.g. Train, EVAL, ENCODE, DECODE).
         iterator: The iterator of the input pipeline.
         embedding_size: The size of the bottleneck layer which is later used as molecular
         descriptor.
-        encode_vocabulary: Dictonary that maps integers to unique tokens of the
+        encode_vocabulary: Dictionary that maps integers to unique tokens of the
         input strings.
-        decode_vocabulary: Dictonary that maps integers to unique tokens of the
+        decode_vocabulary: Dictionary that maps integers to unique tokens of the
         output strings.
         encode_voc_size: Number of tokens in encode_vocabulary.
         decode_voc_size: Number of tokens in decode_vocabulary.
-        char_embedding_size: Number of Dimensiones used to encode the one-hot encoded tokens
-        in a contineous space.
+        char_embedding_size: Number of dimensions used to encode the one-hot encoded tokens
+        in a continuous space.
         global_step: Counter for steps during training.
         save_dir: Path to directory used to save the model and logs.
         checkpoint_path: Path to the model checkpoint file.
@@ -34,7 +200,7 @@ class BaseModel(ABC):
         rand_input_swap: Flag to define if (for SMILES input) the input SMILES should be swapped
         randomly between canonical SMILES (usually output sequnce) and random shuffled SMILES
         (usually input sequnce).
-        measures_to_log: Dictonary with values to log.
+        measures_to_log: Dictionary with values to log.
         emb_activation: Activation function used in the bottleneck layer.
         lr: Learning rate for training the model.
         lr_decay: Boolean to define if learning rate decay is used.
@@ -70,15 +236,6 @@ class BaseModel(ABC):
         self.decode_voc_size = len(self.decode_vocabulary)
         self.one_hot_embedding = hparams.one_hot_embedding
         self.char_embedding_size = hparams.char_embedding_size
-        
-        ### TF GET VAR, N.B. Initializer
-        #self.global_step = tf.get_variable('global_step',
-        #                                   [],
-        #                                   ### CONSTANT INITIALIZER
-        #                                   initializer=tf.constant_initializer(0),
-        #                                   trainable=False)
-        self.global_step = torch.tensor(0, requires_grad = False)
-
 
         self.save_dir = hparams.save_dir
         ### Check this is in line with model saver
@@ -104,42 +261,22 @@ class BaseModel(ABC):
             raise ValueError("Choose one of following modes: TRAIN, EVAL, ENCODE, DECODE")
         
         ### TORCH LAYERS
+        ### TF GET VAR, N.B. Initializer
+        #self.global_step = tf.get_variable('global_step',
+        #                                   [],
+        #                                   ### CONSTANT INITIALIZER
+        #                                   initializer=tf.constant_initializer(0),
+        #                                   trainable=False)
+        self.global_step = torch.tensor(0, requires_grad = False)
+        ...
+        #... opti
+        ... loss
+        ### TF TRAIN ADAM OPT
+        #self.opt = tf.train.AdamOptimizer(self.lr, name='optimizer')
+        self.opt = torch.optim.Adam(self.parameters(),lr = self.lr)  ### BUT, self.parameters() probably not defined, see ODO
 
-    ### TO EVENTUALLY BE RENAMED/MOVED,  becomes the forward
-    ### def forward(self):
-    def build_graph(self):
-        """Method that defines the graph for a translation model instance."""
-        if self.mode in ["TRAIN", "EVAL"]:
-            ### NAME SCOPE
-            #with tf.name_scope("Input"):
-            (self.input_seq,
-            self.shifted_target_seq,
-            self.input_len,
-            self.shifted_target_len,
-            self.target_mask,
-            encoder_emb_inp,
-            decoder_emb_inp) = self._input()
-            ### VAR SCOPE
-            #with tf.variable_scope("Encoder"):
-            encoded_seq = self._encoder(encoder_emb_inp)
-            ### VAR SCOPE
-            #with tf.variable_scope("Decoder"):
-            logits = self._decoder(encoded_seq, decoder_emb_inp)
-                ### ARGMAX, N.B. int32
-                ### self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
-            self.prediction = torch.argmax(logits, dim=2)
-            ### NAME SCOPE
-            ### with tf.name_scope("Measures"):
-            self.loss = self._compute_loss(logits)
-            self.accuracy = self._compute_accuracy(self.prediction)
-            self.measures_to_log["loss"] = self.loss
-            self.measures_to_log["accuracy"] = self.accuracy
 
-            if self.mode == "TRAIN":
-                ### NAME SCOPE
-                #with tf.name_scope("Training"):
-                self._training()
-
+        ### TORCH INIT
         if self.mode == "ENCODE":
             ### NAME SCOPE
             #with tf.name_scope("Input"):
@@ -148,11 +285,8 @@ class BaseModel(ABC):
             ### PLACEHOLDER, N.B. int32 ---> Directly use in forward
             self.input_len = tf.placeholder(tf.int32, [None])
             encoder_emb_inp = self._emb_lookup(self.input_seq)
-            ### VAR SCOPE
-            #with tf.variable_scope("Encoder"):
-            self.encoded_seq = self._encoder(encoder_emb_inp)
 
-        if self.mode == "DECODE":
+        if self.mode == "DECODE": 
             if self.one_hot_embedding:
                 ### ONE HOT, indices, depth
                 ### Takes [0,N] interval, depth N
@@ -164,9 +298,6 @@ class BaseModel(ABC):
                     torch.arange(0, self.decode_voc_size), 
                     num_classes = self.decode_voc_size 
                 )
-
-
-
             elif self.encode_vocabulary == self.decode_vocabulary:
                 ### GET VARIABLE
                 self.decoder_embedding = tf.get_variable(
@@ -192,6 +323,43 @@ class BaseModel(ABC):
             ### PLACEHOLDER int
             self.maximum_iterations = tf.placeholder(tf.int32, [])
 
+
+    def forward(self):
+        """Method that defines the graph for a translation model instance."""
+        if self.mode in ["TRAIN", "EVAL"]:
+            ### NAME SCOPE
+            #with tf.name_scope("Input"):
+            (self.input_seq, self.shifted_target_seq,
+            self.input_len, self.shifted_target_len,
+            self.target_mask, encoder_emb_inp,
+            decoder_emb_inp) = self._input()
+            ### VAR SCOPE
+            #with tf.variable_scope("Encoder"):
+            encoded_seq = self._encoder(encoder_emb_inp)
+            ### VAR SCOPE
+            #with tf.variable_scope("Decoder"):
+            logits = self._decoder(encoded_seq, decoder_emb_inp)
+                ### ARGMAX, N.B. int32
+                ### self.prediction = tf.argmax(logits, axis=2, output_type=tf.int32)
+            self.prediction = torch.argmax(logits, dim=2)
+            ### NAME SCOPE
+            ### with tf.name_scope("Measures"):
+            self.loss = self._compute_loss(logits)
+            self.accuracy = self._compute_accuracy(self.prediction)
+            self.measures_to_log["loss"] = self.loss
+            self.measures_to_log["accuracy"] = self.accuracy
+
+            if self.mode == "TRAIN":
+                ### NAME SCOPE
+                #with tf.name_scope("Training"):
+                self._training()
+
+        if self.mode == "ENCODE":
+            ### VAR SCOPE
+            #with tf.variable_scope("Encoder"):
+            self.encoded_seq = self._encoder(encoder_emb_inp)
+
+        if self.mode == "DECODE":
             ### VAR SCOPE
             # with tf.variable_scope("Decoder"):
             self.output_ids = self._decoder(self.encoded_seq)
@@ -212,8 +380,8 @@ class BaseModel(ABC):
             input_len: Number of tokens in input.
             shifted_target_len: Number of tokens in the shifted target sequence.
             target_mask: shifted target sequence with masked padding tokens.
-            encoder_emb_inp: Embedded input sequnce (contineous character embedding).
-            decoder_emb_inp: Embedded input sequnce (contineous character embedding).
+            encoder_emb_inp: Embedded input sequence (continuous character embedding).
+            decoder_emb_inp: Embedded input sequence (continuous character embedding).
             mol_features: if Arg with_features is set to True, the molecular features of the
             input pipleine are passed.
         """
@@ -241,15 +409,19 @@ class BaseModel(ABC):
             target_seq = seq2
             target_len = seq2_len
             ### TF RESHAPE / TF SHAPE
-            shifted_target_len = tf.reshape(target_len, [tf.shape(target_len)[0]]) - 1
+            #shifted_target_len = tf.reshape(target_len, [tf.shape(target_len)[0]]) - 1
+            shifted_target_len = torch.reshape(target_len, (torch.size(target_len)[0])) - 1
             ### TF SLICE
-            shifted_target_seq = tf.slice(target_seq, [0, 1], [-1, -1])
+            #shifted_target_seq = tf.slice(target_seq, [0, 1], [-1, -1])
+            shifted_target_seq = target_seq[0:,1:] ## I think this is correct
             ### TF SEQUENCE MASK
             target_mask = tf.sequence_mask(shifted_target_len, dtype=tf.float32)
             ### TF REDUCE SUM
-            target_mask = target_mask / tf.reduce_sum(target_mask)
+            #target_mask = target_mask / tf.reduce_sum(target_mask)
+            target_mask = target_mask / torch.sum(target_mask)
             ### TF RESHAPE/ TF SHAPE
-            input_len = tf.reshape(input_len, [tf.shape(input_len)[0]])
+            #input_len = tf.reshape(input_len, [tf.shape(input_len)[0]])
+            input_len = torch.reshape(input_len, (torch.size(input_len)[0]))
 
         encoder_emb_inp, decoder_emb_inp = self._emb_lookup(input_seq, target_seq)
         if with_features:
@@ -261,14 +433,14 @@ class BaseModel(ABC):
 
     def _emb_lookup(self, input_seq, target_seq=None):
         """Method that performs an embedding lookup to embed the one-hot encoded input
-        and output sequnce into the trainable contineous character embedding.
+        and output sequnce into the trainable continuous character embedding.
 
         Args:
-            input_seq: The input sequnce.
-            target_seq: The target sequnce.
+            input_seq: The input sequence.
+            target_seq: The target sequence.
         Returns:
-            encoder_emb_inp: Embedded input sequnce (contineous character embedding).
-            decoder_emb_inp: Embedded input sequnce (contineous character embedding).
+            encoder_emb_inp: Embedded input sequence (continuous character embedding).
+            decoder_emb_inp: Embedded input sequence (continuous character embedding).
         """
         if self.one_hot_embedding:
             ### TF ONE HOT
@@ -333,12 +505,12 @@ class BaseModel(ABC):
 
 
             scheduler = torch.optim.lr_scheduler.ExponentialLR(self.opt, gamma =)
+            sceduler.state_dict()
+            scheduler.load_state_dict(...)
+            scheduler.get_last_lr()
             ## Here gamma should be multiplicative factor of decay, i.e. lr_decay_factor
             ## Order needs to be fixed, i.e. rewrite to be more torch-like
 
-        ### TF TRAIN ADAM OPT
-        #self.opt = tf.train.AdamOptimizer(self.lr, name='optimizer')
-        self.opt = torch.optim.Adam(self.parameters(),lr = self.lr)  ### BUT, self.parameters() probably not defined, see ODO
 
         ### TF --> IMPLICIT, compute_gradients method
         grads = self.opt.compute_gradients(self.loss)
@@ -346,6 +518,15 @@ class BaseModel(ABC):
         ### TF CLIP_BY_VALUE
         grads = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads]
         self.train_step = self.opt.apply_gradients(grads, self.global_step)
+
+        ### NEEDS TO BE MORE LIKE --> PYTORCH
+        # model(x)
+        # loss = criterion( y_pred, y)
+        # optimizer.zero_grad()
+        # loss.backward()
+        # optimizer.step()
+
+
 
     @abstractmethod
     def _encoder(self, encoder_emb_inp):
@@ -393,6 +574,7 @@ class BaseModel(ABC):
         ### TF SESSION + sess.run alternative required
         #_, step = sess.run([self.train_step, self.global_step])
         ???
+        step = self._train() ?
         return step
 
     def eval(self, sess):
@@ -401,7 +583,7 @@ class BaseModel(ABC):
         Args:
             sess: The Session the model is running in.
         Returns:
-            step: The loged measures.
+            step: The logged measures.
         """
         ### TF SESSION + sess.run
         return sess.run(list(self.measures_to_log.values()))
@@ -410,9 +592,9 @@ class BaseModel(ABC):
         """Helper function to transform the one-hot encoded sequnce tensor back to string-sequence.
 
         Args:
-            seq: sequnce of one-hot encoded characters.
+            seq: Sequence of one-hot encoded characters.
         Returns:
-            string sequnce.
+            string sequence.
         """
         return ''.join([self.decode_vocabulary_reverse[idx] for idx in seq
                         if idx not in [-1, self.decode_vocabulary["</s>"],
