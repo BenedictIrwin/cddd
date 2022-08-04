@@ -103,7 +103,94 @@ class MiniCDDDInference(torch.nn.Module):
       embeddings.append(torch.tanh(emb).detach().numpy())
 
     return np.array(embeddings)
+
+class MiniCDDDDecoder(torch.nn.Module):
+  """NoisyGRUSeq2SeqWithFeatures"""
+  def __init__(self):
+    super().__init__()
+
+    self.voc_size = 40
+    self.gru_layer_sizes = [512, 1024, 2048]
+    self.latent_size = 512
     
+    ### Load pretrained weights
+    pretrained_gru_dict = {}
+    for i in ["0","1","2"]:
+      pretrained_gru_dict["gru_{}".format(i)] = {}
+      for j in ["candidate", "gates"]:
+        for k in ["bias","kernel"]:
+          file_name = "Decoder/decoder/multi_rnn_cell/cell_{}/gru_cell/{}/{}.npy".format(i,j,k).replace("/","-")
+          pretrained_gru_dict["gru_{}".format(i)]["{}-{}".format(j,k)] = np.load(file_name)
+
+    
+    ## Projection Layer that maps the final GRU output to token logits
+    self.decoder_dense = nn.Linear( self.gru_layer_sizes[-1] , self.voc_size, bias = False)
+    with torch.no_grad():
+      self.decoder_dense.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-decoder-dense-kernel.npy")).float()) ## [2048, 40]
+
+    ## decoder_embedding : likely uses the same weights as the encoder embedding?
+    #self.encoder_embedding = nn.Embedding(40, 32)
+    pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
+    self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
+
+    ### A stack of three TF-like GRUs
+    self.decoder_GRU = MultiGRU(self.voc_emb_size, self.gru_layer_sizes)
+    self.decoder_GRU.from_pretrained(pretrained_gru_dict)
+
+    ### Layer that takes latent vector to concatenated GRU history (h0) inputs
+    self.dense_layer = nn.Linear(self.latent_size, sum(self.gru_layer_sizes))
+    with torch.no_grad():
+      self.dense_layer.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-kernel.npy").T).float()) # [512, 3584 = 512 + 1024 + 2048]
+      self.dense_layer.bias = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-bias.npy")).float()) # [3584]
+
+  def forward(self, input_vecs):
+
+    ### input_vecs through self.dense_layer to get size 512 + 1024 + 2048
+    y = self.dense_layer(input_vecs)
+    h0 = [ y[:512], y[512:512+1024], y[512+1024:] ]   ### ASSUMES ORDER!!!!
+
+    x = one_hot(["39"])
+    print(x)
+    x = self.encoder_embedding(x) ## x is length 32 using character encoding
+    
+    output_string = ""
+    for <condition, i.e. stop when "</s>" is seen>:
+      #h_new = [0,0,0]
+      #x = h_new[0] = gru_0(x, h0[0]) ### x is now size 512
+      #x = h_new[1] = gru_1(x, h0[1]) ### x is now size 1024
+      #x = h_new[2] = gru_2(x, h0[2]) ### x is now size 2048
+      ???, ??? = self.decoder_GRU(x, h0)
+      logits = self.decoder_dense(x)  ### Taking from 2048 to [logits in 40]
+      probs = torch.argmax(logits)  ### one hot in 40
+      choose_character, or just use probabilities as above to generate?
+      x = self.encoder_embedding(something?)
+
+    ## Take the h_new as h0, and concat the token to string, but also take that as the next input?
+
+    #self.decode_vocabulary === dict maps chars to numbers ---> GET from cddd
+
+    #string = ""
+    #start_tokens = ['<s>'] === '39' ? or a batch
+    #end_token = '</s>' === '0' ?
+
+    #start tokens -> to tensor, type int32
+    #end token -> to tensor type int32
+
+    #self._start_inputs = self._embedding_fn(self._start_tokens)
+
+    ### Look for tf.contrib.seq2seq.BeamSearchDecoder(cell = GRU,)
+
+    ### Look for tf.contrib.seq2seq.dynamic_decode()
+    #for ...
+    #  logits = self.decoder_GRU(seq, decoder_emb_inp)   #### logits will be of length [40]
+    #  probs = torch.argmax(logits, dim).int()  #### This will end up being one-hot [ ... 0, 0, 1, 0, 0 ...]
+
+      ### argmax ids' -> embedding_lookup
+
+    #  token = ...
+    #  string.append(token)
+
+
 
 ### Some examples
 test_inputs = np.load("test_in_seq.npy")
@@ -111,10 +198,18 @@ test_input_len = np.load("test_in_len.npy")
 test_outputs = np.load("test_output_embeddings.npy")
 
 ### Call the model
-model = MiniCDDDInference()
-outputs = model(test_inputs, test_input_len)
+encoder = MiniCDDDInference()
+outputs = encoder(test_inputs, test_input_len)
 
 print(outputs)
 print(outputs.shape)
 #print(test_outputs)
+
+
+decoder = MiniCDDDDecoder()
+outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
+
+
+
+
 
