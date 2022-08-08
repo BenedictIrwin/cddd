@@ -7,6 +7,7 @@ import tensorflow as tf
 from cddd.inference import InferenceModel
 from cddd.preprocessing import preprocess_smiles
 from cddd.hyperparameters import DEFAULT_DATA_DIR
+#from app import app_run
 _default_model_dir = os.path.join(DEFAULT_DATA_DIR, 'default_model')
 FLAGS = None
 

@@ -4,7 +4,6 @@ import tensorflow as tf
 from cddd import models
 from cddd import input_pipeline
 
-
 def build_models(hparams, modes=["TRAIN", "EVAL", "ENCODE"]):
     """Helper function to build a translation model for one or many different modes.
 
@@ -28,6 +27,7 @@ def build_models(hparams, modes=["TRAIN", "EVAL", "ENCODE"]):
 
 Model = namedtuple("Model", ("graph", "model", "sess"))
 
+'''
 def create_model(mode, model_creator, input_pipeline_creator, hparams):
     """Helper function to build a translation model for a certain mode.
 
@@ -61,3 +61,19 @@ def create_model(mode, model_creator, input_pipeline_creator, hparams):
         model.build_graph()
         sess = tf.Session(graph=graph, config=sess_config)
     return Model(graph=graph, model=model, sess=sess)
+'''
+
+#def build_models(hparams, modes = ["TRAIN", "EVAL", "ENCODE"]):
+#    model = getattr(models, hparams.model)
+#    input_pipe = getattr(input_pipeline, hparams.input_pipeline)
+#    return create_model(modes, model, input_pipe, hparams)
+
+def create_model(mode, model_creator, input_pipepline, hparams):
+    if mode in ["TRAIN", "EVAL"]:
+      print("CREATE MODEL: TRAIN EVAL NOT SUPPORTED!")
+      exit()
+    else:
+      iterator = None
+    model = model_creator(mode = mode, iterator = iterator, hparams = hparams)
+    return Model(graph = None, model = model, sess = None)
+

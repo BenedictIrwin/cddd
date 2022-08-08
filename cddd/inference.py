@@ -30,19 +30,21 @@ def sequence2embedding(model, hparams, seq_list):
     Returns:
         Embedding of the input sequnces as numpy array.
     """
-    emb_list = []
-    with model.graph.as_default():
-        input_pipeline = InputPipelineInferEncode(seq_list, hparams)
-        input_pipeline.initilize()
-        model.model.restore(model.sess)
-        while 1:
-            try:
-                input_seq, input_len = input_pipeline.get_next()
-                emb = model.model.seq2emb(model.sess, input_seq, input_len)
-                emb_list.append(emb)
-            except StopIteration:
-                break
-        embedding_array = np.concatenate(emb_list)
+    #emb_list = []
+    #with model.graph.as_default():  ## GRAPH DOES NOT EXIST
+    input_pipeline = InputPipelineInferEncode(seq_list, hparams)
+    input_pipeline.initilize()
+    #model.model.restore(model.sess)
+    while 1:
+        try:
+            input_seq, input_len = input_pipeline.get_next()
+            emb = model.model.encode(input_seq, input_len)
+            emb_list.append(emb)
+        except StopIteration:
+            break
+    embedding_array = np.concatenate(emb_list)
+    #input_seq, input_len = InputPipelineInferEncode(seq_list, hparams) #### EDIT THIS TO SIMPLY RETURN SEQ's and LENGTHS
+    #embedding_array = model.model.encode(input_seq, input_len)
     return embedding_array
 
 def embedding2sequence(model, hparams, embedding, num_top=1, maximum_iterations=1000):
