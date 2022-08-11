@@ -232,8 +232,19 @@ class InputPipelineWithFeatures(InputPipeline):
 
     def make_dataset_and_iterator(self):
         """Method that builds a TFRecordDataset and creates a iterator."""
+        print(self.file)
         self.dataset = tf.data.TFRecordDataset(self.file)
+        #with open(self.file) as f:
+        #  for line in f:
+        #    print(line)
+        #    input()
+        print(self.dataset)
+        print(self.dataset)
         self.dataset = self.dataset.map(self._parse_element, num_parallel_calls=32)
+        print(self._process_element)
+        print(self.input_sequence_key)
+        print(self.output_sequence_key)
+        print(self.features_key)
         if self.mode == "TRAIN":
             self.dataset = self.dataset.repeat()
         self.dataset = self.dataset.map(
@@ -255,6 +266,7 @@ class InputPipelineWithFeatures(InputPipeline):
             window_size=self.batch_size))
         if self.mode == "TRAIN":
             self.dataset = self.dataset.shuffle(buffer_size=self.buffer_size)
+            print(self.dataset)
         self.iterator = self.dataset.make_initializable_iterator()
 
     def _parse_element(self, example_proto):

@@ -68,10 +68,14 @@ def create_model(mode, model_creator, input_pipeline_creator, hparams):
 #    input_pipe = getattr(input_pipeline, hparams.input_pipeline)
 #    return create_model(modes, model, input_pipe, hparams)
 
-def create_model(mode, model_creator, input_pipepline, hparams):
+def create_model(mode, model_creator, input_pipeline_creator, hparams):
     if mode in ["TRAIN", "EVAL"]:
-      print("CREATE MODEL: TRAIN EVAL NOT SUPPORTED!")
-      exit()
+      #input_pipe = input_pipeline_creator(mode, hparams)
+      #input_pipe.make_dataset_and_iterator()
+      #iterator = input_pipe.iterator
+      iterator = None ### to be removed
+      #print("CREATE MODEL: TRAIN EVAL NOT SUPPORTED!")
+      #exit()
     else:
       iterator = None
     model = model_creator(mode = mode, iterator = iterator, hparams = hparams)

@@ -30,7 +30,7 @@ def sequence2embedding(model, hparams, seq_list):
     Returns:
         Embedding of the input sequnces as numpy array.
     """
-    #emb_list = []
+    emb_list = []
     #with model.graph.as_default():  ## GRAPH DOES NOT EXIST
     input_pipeline = InputPipelineInferEncode(seq_list, hparams)
     input_pipeline.initilize()
