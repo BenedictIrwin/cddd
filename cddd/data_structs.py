@@ -11,21 +11,23 @@ import torch
 from torch.utils.data import Dataset
 import pandas as pd
 
-from .utils import Variable, get_moments
-from discriminator.utils import get_headings
+from .utils import Variable #, get_moments
+#from discriminator.utils import get_headings
 
 
 class Vocabulary(object):
     """A class for handling encoding/decoding from SMILES to an array of indices"""
-    def __init__(self, init_from_file=None, max_length=140):
-        self.special_tokens = ['EOS', 'GO']
-        self.additional_chars = set()
-        self.chars = self.special_tokens
-        self.vocab_size = len(self.chars)
-        self.vocab = dict(zip(self.chars, range(len(self.chars))))
+    def __init__(self, init_dict, max_length=140):
+        #self.special_tokens = ['</s>', '<s>']
+        #self.additional_chars = set()
+        #self.chars = self.special_tokens
+        #self.vocab_size = len(self.chars)
+        #self.vocab = dict(zip(self.chars, range(len(self.chars))))
+        self.vocab = init_dict
         self.reversed_vocab = {v: k for k, v in self.vocab.items()}
         self.max_length = max_length
-        if init_from_file: self.init_from_file(init_from_file)
+        self.chars = list(self.vocab.keys())
+        #if init_from_file: self.init_from_file(init_from_file)
 
     def encode(self, char_list):
         """Takes a list of characters (eg '[NH]') and encodes to array of indices"""
@@ -38,43 +40,46 @@ class Vocabulary(object):
         """Takes an array of indices and returns the corresponding SMILES"""
         chars = []
         for i in matrix:
-            if i == self.vocab['EOS']: break
+            if i == self.vocab['</s>']: break
             chars.append(self.reversed_vocab[i])
         smiles = "".join(chars)
-        smiles = smiles.replace("L", "Cl").replace("R", "Br")
+        #smiles = smiles.replace("L", "Cl").replace("R", "Br")
         return smiles
 
     def tokenize(self, smiles):
         """Takes a SMILES and return a list of characters/tokens"""
-        regex = '(\[[^\[\]]{1,6}\])'
-        smiles = replace_halogen(smiles)
-        char_list = re.split(regex, smiles)
-        tokenized = []
-        for char in char_list:
-            if char.startswith('['):
-                tokenized.append(char)
-            else:
-                chars = [unit for unit in char]
-                [tokenized.append(unit) for unit in chars]
-        tokenized.append('EOS')
+        #regex = '(\[[^\[\]]{1,6}\])'
+        REGEX_SML = r'Cl|Br|[#%\)\(\+\-1032547698:=@CBFIHONPS\[\]cionps]'
+
+        #smiles = replace_halogen(smiles)
+        #print(smiles)
+        char_list = re.findall(REGEX_SML, smiles)
+        tokenized = ['<s>'] + char_list
+        #for char in char_list:
+        #    if char.startswith('['):
+        #        tokenized.append(char)
+        #    else:
+        #        chars = [unit for unit in char]
+        #        [tokenized.append(unit) for unit in chars]
+        tokenized.append('</s>')
         return tokenized
 
-    def add_characters(self, chars):
-        """Adds characters to the vocabulary"""
-        for char in chars:
-            self.additional_chars.add(char)
-        char_list = list(self.additional_chars)
-        char_list.sort()
-        self.chars = char_list + self.special_tokens
-        self.vocab_size = len(self.chars)
-        self.vocab = dict(zip(self.chars, range(len(self.chars))))
-        self.reversed_vocab = {v: k for k, v in self.vocab.items()}
+    #def add_characters(self, chars):
+    #    """Adds characters to the vocabulary"""
+    #    for char in chars:
+    #        self.additional_chars.add(char)
+    #    char_list = list(self.additional_chars)
+    #    char_list.sort()
+    #    self.chars = char_list + self.special_tokens
+    #    self.vocab_size = len(self.chars)
+    #    self.vocab = dict(zip(self.chars, range(len(self.chars))))
+    #    self.reversed_vocab = {v: k for k, v in self.vocab.items()}
 
-    def init_from_file(self, file):
-        """Takes a file containing \n separated characters to initialize the vocabulary"""
-        with open(file, 'r') as f:
-            chars = f.read().split()
-        self.add_characters(chars)
+    #def init_from_file(self, file):
+    #    """Takes a file containing \n separated characters to initialize the vocabulary"""
+    #    with open(file, 'r') as f:
+    #        chars = f.read().split()
+    #    self.add_characters(chars)
 
     def __len__(self):
         return len(self.chars)
@@ -83,62 +88,65 @@ class Vocabulary(object):
         return "Vocabulary containing {} tokens: {}".format(len(self), self.chars)
 
 
-class Dataset_gen(Dataset):
-    def __init__(self, voc, smi_file, vec_file):
+class DatasetWithFeatures(Dataset):
+    #def __init__(self, voc, smi_file, vec_file):
+    def __init__(self, voc, smi_file):
         """
-        Args:
-            csv_file (string): Path to the csv file with annotations.
-            root_dir (string): Directory with all the images.
-            transform (callable, optional): Optional transform to be applied
-                on a sample.
+        #Args:
         """
         self.voc = voc
-        self.smiles = pd.read_csv(smi_file, header=0, dtype=str).values
-        self.smiles = [x[0] for x in self.smiles]
+        self.batch_size = 10 ### For testing purposes
+        self.max_length_smiles = 150
+        with open(smi_file) as f: self.smiles = [i.strip() for i in f.readlines()]
+        #self.smiles = pd.read_csv(smi_file, header=0, dtype=str).values
+        #self.smiles = [x[0] for x in self.smiles]
 
         # reading descriptors
-        data = pd.read_csv(vec_file, header=0)
+        #data = pd.read_csv(vec_file, header=0)
         #look for missing data entries
-        if data.isnull().values.any():
-            raise ValueError('Found nan in data, possible data missing in generation vectors.')
+        #if data.isnull().values.any():
+        #    raise ValueError('Found nan in data, possible data missing in generation vectors.')
 
         #correct heading order
-        headings = get_headings()
-        data = data.reindex(columns=headings)
+        #headings = get_headings()
+        #data = data.reindex(columns=headings)
         #look for missing columns
-        if data.isnull().values.any():
-            raise ValueError('Found nan in data, possible columns missing in generation vectors.')
+        #if data.isnull().values.any():
+        #    raise ValueError('Found nan in data, possible columns missing in generation vectors.')
 
         #calculate mew and std for normilization of generation vectors
-        self.vectors = data.values
-        self.mew, self.std = get_moments(self.vectors)
+        #self.vectors = data.values
+        #self.mew, self.std = get_moments(self.vectors)
         # catch any zeros which will give nan when normalizing
-        self.std = np.array([x if x != 0 else 1.0 for x in self.std])
-        self.vectors = (self.vectors - self.mew) / self.std
+        #self.std = np.array([x if x != 0 else 1.0 for x in self.std])
+        #self.vectors = (self.vectors - self.mew) / self.std
 
     def __len__(self):
-        if len(self.smiles) != len(self.vectors):
-            raise ValueError('Smiles and Vector lengths mismatched')
+        #if len(self.smiles) != len(self.vectors):
+        #    raise ValueError('Smiles and Vector lengths mismatched')
         return len(self.smiles)
 
     def __getitem__(self, i):
-        mol = self.smiles[i]
-        vec = self.vectors[i]
-        tokenized = self.voc.tokenize(mol)
-        encoded = self.voc.encode(tokenized)
-        return [Variable(encoded), Variable(vec)]
+        mols = np.random.choice(self.smiles, size = self.batch_size, replace = False)
+        #vec = self.vectors[i]
+        tokenized = [self.voc.tokenize(mol) for mol in mols]
+        encoded = np.array([self.voc.encode(t) for t in tokenized])
+        lengths = np.array([len(enc) for enc in encoded])
+        encoded = np.array([np.pad(enc,(0,self.max_length_smiles - len(enc))) for enc in encoded])
+        #return [Variable(encoded), Variable(vec)]
+        return Variable(encoded).int(), Variable(lengths).int()
 
-    @classmethod
-    def collate_fn(cls, arr):
-        """Function to take a list of encoded sequences and turn them into a batch"""
-        max_length_smi = max([data[0].size(0) for data in arr])
-        max_length_vec = max([data[1].size(0) for data in arr])
-        collated_arr_smi = Variable(torch.zeros(len(arr), max_length_smi))
-        collated_arr_vec = Variable(torch.zeros(len(arr), max_length_vec))
-        for i, data in enumerate(arr):
-            collated_arr_smi[i, :data[0].size(0)] = data[0]
-            collated_arr_vec[i, :data[1].size(0)] = data[1]
-        return collated_arr_smi, collated_arr_vec
+    #@classmethod
+    #def collate_fn(cls, arr):
+    #    """Function to take a list of encoded sequences and turn them into a batch"""
+    #    max_length_smi = max([data[0].size(0) for data in arr])
+    #    #max_length_vec = max([data[1].size(0) for data in arr])
+    #    collated_arr_smi = Variable(torch.zeros(len(arr), max_length_smi))
+    #    #collated_arr_vec = Variable(torch.zeros(len(arr), max_length_vec))
+    #    for i, data in enumerate(arr):
+    #        collated_arr_smi[i, :data[0].size(0)] = data[0]
+    #        #collated_arr_vec[i, :data[1].size(0)] = data[1]
+    #    return collated_arr_smi#, collated_arr_vec
 
 class Experience(object):
     """Class for prioritized experience replay that remembers the highest scored sequences

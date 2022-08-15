@@ -62,6 +62,9 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #print(hparams)
     #exit()
 
+    hparams.cell_size = [512, 1024, 2048]
+ 
+
     self.voc_size = 40
     self.voc_emb_size = 32
     #self.gru_layer_sizes = [512, 1024, 2048]
@@ -128,11 +131,18 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
   ### Embed some tokenized strings
   def encode(self, input_seqs, input_lens):
     """Encode sequences to latent vectors given lengths"""
+    print(input_seqs.type)
+    print(input_lens.type)
+
+    if( type(input_seqs) == torch.Tensor):
+      print("Torch")
+    else:
+      input_seqs = torch.from_numpy(input_seqs).int()
     
-    input_seqs = torch.from_numpy(input_seqs).int()
     h0 = [torch.zeros(i) for i in self.gru_layer_sizes]
     encoder_emb_inp = self.encoder_embedding(input_seqs)
 
+    ### TO be made batch friendly
     embeddings = []
     for compound_emb, length in zip(encoder_emb_inp, input_lens):
       encoder_state = h0
@@ -142,6 +152,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
       emb = self.encoder_dense_layer(torch.cat(encoder_state))
       embeddings.append(torch.tanh(emb).detach().numpy())
 
+    #### Figure out a way to get a batch of torch embeddings?
     return np.array(embeddings)
 
 #class MiniCDDDDecoder(torch.nn.Module):
@@ -161,12 +172,19 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
 
   def decode(self, input_vecs):
 
-    y = torch.from_numpy(input_vecs).float()
-    y = self.decoder_dense_layer(y)
+    if( type(input_vecs) == torch.Tensor):
+      batch_size = input_vecs.size()[0]
+      print("",end="")
+    else:
+      batch_size = input_vecs.shape[0]
+      input_vecs = torch.from_numpy(input_vecs).float()
+    
+    y = self.decoder_dense_layer(input_vecs)
+
+    print("TO BE MADE ROBUST FOR general hparams.cell_size")
     h0 = [y[:,:512], y[:,512:512+1024], y[:,512+1024:]]
 
-    ### Or do [39] * batch_size?
-    x = np.array([39,39,39,39,39,39])
+    x = np.array([39] * batch_size)
     x = torch.from_numpy(x).int()
     x = self.encoder_embedding(x) ## x is length 32 using character encoding
    
@@ -185,7 +203,9 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
         xx = self.encoder_embedding(probs)
         count += 1
       print(output_string)
-
+    
+    ### To return logits
+    return None
 
 ### Some examples
 #test_inputs = np.load("test_in_seq.npy")

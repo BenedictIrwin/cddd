@@ -7,6 +7,7 @@ import tensorflow as tf
 from cddd.model_helper import build_models
 from cddd.evaluation import eval_reconstruct, parallel_eval_qsar
 from cddd.hyperparameters import add_arguments, create_hparams
+from cddd.pytorch_train import train as pt_train
 
 tf.logging.set_verbosity(tf.logging.ERROR)
 FLAGS = None
@@ -56,6 +57,11 @@ def main(unused_argv):
     hparams = create_hparams(FLAGS)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(hparams.device)
     train_model, eval_model, encode_model = build_models(hparams)
+
+    print("GOT HERE!")
+    pt_train(hparams)
+    exit()
+
     train_loop(train_model, eval_model, encode_model, hparams)
 
 
