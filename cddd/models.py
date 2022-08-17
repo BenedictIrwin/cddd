@@ -187,15 +187,23 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     x = np.array([39] * batch_size)
     x = torch.from_numpy(x).int()
     x = self.encoder_embedding(x) ## x is length 32 using character encoding
-   
+ 
+    all_logits = []
+    all_strings = []
+    print("TO BE MADE FRIENDLY FOR BATCHES")
     for i in range(len(x)):
       output_string = "<s>"
       last_argmax = 39 ## I.e. start char
       count = 0
       xx, hh = x[i], [ h0[0][i], h0[1][i], h0[2][i]]
-      while last_argmax != 0 and count < 50:
+      print("COUNT < 50 needs to be upgraded to hparams.max_string_length?")
+      compound_logits = []
+      max_string_length = 150  ##### TO BE EDITED in hparams
+      while last_argmax != 0 and count < max_string_length:
         output, hh = self.decoder_GRU(xx, hh)
         logits = self.decoder_projection(output)  ### Taking from 2048 to [logits in 40]
+        compound_logits.append(logits.detach().numpy())
+        #print(torch.sum(F.softmax(logits)))
         probs = torch.argmax(logits)  ### one hot in 40
         last_argmax = int(probs.detach().numpy()) 
         token = self.decode_vocabulary_inv[last_argmax]
@@ -203,9 +211,13 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
         xx = self.encoder_embedding(probs)
         count += 1
       print(output_string)
-    
+      all_strings.append(output_string)
+      compound_logits = np.array(compound_logits)
+      compound_logits = np.vstack([compound_logits, np.zeros([max_string_length - count - 1,40])])
+      all_logits.append(compound_logits)
+
     ### To return logits
-    return None
+    return np.array(all_logits), output_string
 
 ### Some examples
 #test_inputs = np.load("test_in_seq.npy")
