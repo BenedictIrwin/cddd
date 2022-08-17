@@ -90,112 +90,22 @@ def train(hparams):
       target_seq = torch.tensor(seq1)
       target_len = torch.tensor(seq1_len)
 
-      print(target_len.size())
-
-      ### TF RESHAPE / TF SHAPE
-      #shifted_target_len = tf.reshape(target_len, [tf.shape(target_len)[0]]) - 1
       shifted_target_len = target_len - 1
-      print(shifted_target_len)
-      ### TF SLICE
-      #shifted_target_seq = tf.slice(target_seq, [0, 1], [-1, -1])
       shifted_target_seq = target_seq[0:,1:].long() ## I think this is correct
-      print(target_seq)
-      print(target_seq.size())
-      print(shifted_target_seq)
-      print(shifted_target_seq.size())
-
       
-      ### TF SEQUENCE MASK
-      #arget_mask = tf.sequence_mask(shifted_target_len, dtype=tf.float32) ## maxlen = None
-      #tf.sequence_mask( [1,2] ) -> [True, False, ...], [True, True, False, ...]#
       ### Produce masks
       target_mask = torch.arange(target_seq.size()[1] - 1)[None, :] < shifted_target_len[:, None]
-      
-
-      ### TF REDUCE SUM
-      #target_mask = target_mask / tf.reduce_sum(target_mask)
       target_mask = target_mask / torch.sum(target_mask)
-      #print(target_mask)
-      #input()
-      ### TF RESHAPE/ TF SHAPE
-      #input_len = tf.reshape(input_len, [tf.shape(input_len)[0]])
-      
-      #input_len = torch.reshape(input_len, (torch.size(input_len)[0]))
-     
-      #input("pre emb...")
-
-      #### CHECK
-      #encoder_emb_inp, decoder_emb_inp = model._emb_lookup(input_seq, target_seq)
-      
-
-      #if with_features:
-      #  return (input_seq, shifted_target_seq, input_len, shifted_target_len,
-      #    target_mask, encoder_emb_inp, decoder_emb_inp, mol_features)
-      #else:
-      #  return (input_seq, shifted_target_seq, input_len, shifted_target_len,
-      #    target_mask, encoder_emb_inp, decoder_emb_inp)
-
-      #### OR LOOKING AT MODELS.py
-      #embedding = model.encode( encoder_input, encoder_lengths )
       embedding = model.encode( input_seq, input_len )
 
-
-
-      print(embedding)
-      print(embedding.shape)
-
-
-      #input("post")
       logits, strings = model.decode(embedding)
-    
-    
-      print("logits",logits) #### Would have thought, vectors such that i.e. softmax would give probabilities over tokens?
-      print(logits.shape)  ### Shape 10, 150, 40 = batch, max, tokens
-      logits = torch.Tensor(logits)
-      print("logits",logits) #### Would have thought, vectors such that i.e. softmax would give probabilities over tokens?
-
-      ### Some examples
-      #test_inputs = np.load("test_in_seq.npy")
-      #tiest_input_len = np.load("test_in_len.npy")
-      #test_outputs = np.load("test_output_embeddings.npy")
-
-      ### Call the model
-      #encoder = MiniCDDDInference()
-      #outputs = encoder(test_inputs, test_input_len)
-
-      #print(outputs)
-      #print(outputs.shape)
-      #print(test_outputs)
-
-
-      #decoder = MiniCDDDDecoder()
-      #outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
-
-
-
-      #... = model.liklihood(seq, vec)
-      #shifted_target_seq = ???
-
-      loss = F.cross_entropy(logits.transpose(1,2), shifted_target_seq, reduction = 'none')   ### grab from the file ## Check the order
-      #print(loss)
-      #print(loss.size())
-      #print(target_mask)
-      #print(target_mask.size())
-      #a = loss * target_mask
-      #print(a)
-      #print(a.size())
-      #exit()
-
-      input("CHECK THE OUTPUT LOGITS")
+      loss = F.cross_entropy(logits, shifted_target_seq, reduction = 'none')   ### grab from the file ## Check the order
       loss = torch.sum(loss * target_mask)
-      #print(loss)
-      #print(loss.size())
-      #exit()
       loss.backward()
       optimizer.step()
 
       ### Check perforemance and save a checkpoint of the model
-      if( step % hparams.decrease_lr and step != 0 ):
+      if( step % hparams.summary_freq and step != 0 ):
         #decrease_learning_rate(optimizer, decrease_by = ... torch.exponentiallrscehdulaer?)
         tqdm.write("#" * 49)
         tqdm.write("Ep. {:4d}, step {:4d}, loss {:5.3f}\n".format(epoch, step, loss.data.item()))
