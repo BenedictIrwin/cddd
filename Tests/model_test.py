@@ -1,6 +1,10 @@
 from cddd.inference import InferenceModel
 import os
 
+
+from models.py import *
+
+
 def test_model_from_pretrained():
   """ Simple test of using model"""
 
@@ -14,8 +18,50 @@ def test_model_from_pretrained():
 
     assert 1 == 1 ### To build result based check
 
+def test_model_init():
+  """ Test the initialisation of a model """
+
+    hparams = {}
+    print("TO REMOVE iterator and mode from model")
+    model = NoisyGRUSeq2SeqWithFeatures("ENCODE", None, hparams)
+
+    ### Do some checks
+    
+
+def test_TF1_embedding_equivalence():
+  """ Test the embedded vectors are close to TF1 fixed values """
+
+  answers_embeddings_TF1 = torch.from_numpy(np.load("test_output_embeddings.npy"))
+ 
+  ### Get hparams
+
+  ### Initalise model with pretrained weights
+
+  ### Define dataset
+  input_smiles = []
+
+  ### Call model on smiles to get embeddings
+
+  assert torch.allclose()
+
+  ### Reconstruct the SMILES
+
+  assert output_smiles == input_smiles
+
+
+
 def test_training():
 
+  ### Get hparams
+
+  ### Initialise model
+
+  ### Define dataset
+
+  ### model.train
+
+
+  pass
 ### Some examples
 #test_inputs = np.load("test_in_seq.npy")
 #test_input_len = np.load("test_in_len.npy")
@@ -32,6 +78,8 @@ def test_training():
 
 #decoder = MiniCDDDDecoder()
 #outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
+
+
 
 
 ### Run tests
