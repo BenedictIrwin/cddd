@@ -2,8 +2,8 @@ from cddd.inference import InferenceModel
 import os
 
 
-from models.py import *
-
+from cddd.models import *
+from cddd.hyperparameters import create_hparams
 
 def test_model_from_pretrained():
   """ Simple test of using model"""
@@ -21,11 +21,11 @@ def test_model_from_pretrained():
 def test_model_init():
   """ Test the initialisation of a model """
 
-    hparams = {}
-    print("TO REMOVE iterator and mode from model")
-    model = NoisyGRUSeq2SeqWithFeatures("ENCODE", None, hparams)
+  #hparams = {}
+  print("TO REMOVE iterator and mode from model")
+  model = NoisyGRUSeq2SeqWithFeatures("ENCODE", None, hparams)
 
-    ### Do some checks
+  ### Do some checks
     
 
 def test_TF1_embedding_equivalence():
@@ -34,34 +34,57 @@ def test_TF1_embedding_equivalence():
   answers_embeddings_TF1 = torch.from_numpy(np.load("test_output_embeddings.npy"))
  
   ### Get hparams
+  hparams = create_hparams()
+  print(hparams)
+  exit()
 
+  hparams.weights_file = "pretrained."
   ### Initalise model with pretrained weights
+  model = NoisyGRUSeq2SeqWithFeatures(hparams)
 
   ### Define dataset
   input_smiles = []
 
+  output_embeddings = model.encode(input_smiles)
   ### Call model on smiles to get embeddings
 
-  assert torch.allclose()
+  assert torch.allclose(output_embeddings, answers_embeddings_TF1)
 
   ### Reconstruct the SMILES
+  #logits, output_smiles = model.decode(output_embeddings) 
+  _, output_smiles = model.decode(output_embeddings) 
 
   assert output_smiles == input_smiles
 
 
 
 def test_training():
+  """ A test to train a model from initialised state """
 
   ### Get hparams
+  hparams = create_hparams()
+  hparams.weights_file = None ### or hparams.load_file
+  hparams.training_epochs = 1
+  hparams.training_steps = 10
+  hparams.save_file = "testing_training_sav" ## or /dev/null
 
   ### Initialise model
+  model = NoisyGRUSeq2SeqWithFeatures(hparams)
+  ### model - getattribute(hparams.model_type)(hparams) 
 
   ### Define dataset
+  training_dataset = dataset_construction(hparams.training)
 
-  ### model.train
+  ### model.train  This is likely to be pytorch.train
+  model.train(training_dataset)
 
+  assert 1 == 1 ### Coming up with a mteric i.e. training_loss decreases over epochs
 
+def test_qsar():
+  """ A test to run QSAR models using the active latent space """
   pass
+
+
 ### Some examples
 #test_inputs = np.load("test_in_seq.npy")
 #test_input_len = np.load("test_in_len.npy")
@@ -79,8 +102,8 @@ def test_training():
 #decoder = MiniCDDDDecoder()
 #outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
 
-
-
+test_TF1_embedding_equivalence()
+exit()
 
 ### Run tests
 test_model_from_pretrained()
