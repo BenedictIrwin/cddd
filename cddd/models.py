@@ -68,7 +68,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     self.voc_size = 40
     self.voc_emb_size = 32
     #self.gru_layer_sizes = [512, 1024, 2048]
-    print("To remove, just use hparams")
+    #print("To remove, just use hparams")
     self.gru_layer_sizes = self.hparams.cell_size
     self.latent_size = 512
     
@@ -132,11 +132,11 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
   ### Embed some tokenized strings
   def encode(self, input_seqs, input_lens):
     """Encode sequences to latent vectors given lengths"""
-    print(input_seqs.type)
-    print(input_lens.type)
+    #print(input_seqs.type)
+    #print(input_lens.type)
 
     if( type(input_seqs) == torch.Tensor):
-      print("Torch")
+      print("",end="")
     else:
       input_seqs = torch.from_numpy(input_seqs).int()
     
@@ -205,16 +205,16 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
  
     #all_logits = []
     all_strings = []
-    print("TO BE MADE FRIENDLY FOR BATCHES [IN PROGRESS]")
+    #print("TO BE MADE FRIENDLY FOR BATCHES [IN PROGRESS]")
 
-    print("Move these to __init__ as least, but higher up in the chain")
+    #print("Move these to __init__ as least, but higher up in the chain")
     self.hparams.max_string_length = 150  ##### TO BE EDITED in hparams
     self.hparams.voc_size = 40
 
     #batch_logit_tensor = torch.zeros( [shape of fully padded array]) 
     batch_logit_tensor = torch.zeros( [batch_size, self.hparams.voc_size , self.hparams.max_string_length - 1])  ### 10, 40 , 149
-    print("make sure we avoid transpose later on")
-    print(batch_logit_tensor.size())
+    #print("make sure we avoid transpose later on")
+    #print(batch_logit_tensor.size())
     ## Allocate slices based on the index
 
     for i in range(batch_size):
@@ -224,7 +224,6 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
       count = 0
       #xx, hh = x[i], [ h0[0][i], h0[1][i], h0[2][i]]
       xx, hh = x[i], [ h0[j][i] for j in range(len(self.hparams.cell_size))]
-      print("COUNT < 50 needs to be upgraded to self.hparams.max_string_length?")
       #compound_logits = []
       while last_argmax != 0 and count < self.hparams.max_string_length:
         output, hh = self.decoder_GRU(xx, hh)
@@ -241,8 +240,8 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
         output_string += token
         xx = self.encoder_embedding(probs)
         count += 1
-      print(output_string.replace("</s>",""))
-      all_strings.append(output_string)
+      #print(output_string.replace("</s>",""))
+      all_strings.append(output_string.replace("</s>",""))
       #compound_logits = np.array(compound_logits)
       #compound_logits = np.vstack([compound_logits, np.zeros([self.hparams.max_string_length - count - 1,40])])
       #all_logits.append(compound_logits)

@@ -45,11 +45,11 @@ def train(hparams):
   if load_file:
     model.load_state_dict(torch.load(load_file))
 
-  print(hparams)
+  #print(hparams)
 
   optimizer = torch.optim.Adam(model.parameters(), lr = hparams.lr)
   scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma = hparams.lr_decay_frequency)
-  print("VERIFY^ THE CORRECTNESS OF gamma = ... in above!")
+  #print("VERIFY^ THE CORRECTNESS OF gamma = ... in above!")
 
   ### TF has a weird gradient clipping step... 
 
@@ -58,7 +58,7 @@ def train(hparams):
     #for step, (seq1, seq2, seq1_len, seq2_len, features) in tqdm( enumerate(loader), total = len(loader)):
     for step, (seq1, seq1_len) in tqdm( enumerate(data), total = len(data)):
 
-      print(step, seq1, seq1_len)
+      #print(step, seq1, seq1_len)
       #### We need to make this work for batches of compounds?
 
 
