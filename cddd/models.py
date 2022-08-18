@@ -54,25 +54,22 @@ class TFGRUCell(torch.nn.Module):
 
 class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
   """NoisyGRUSeq2SeqWithFeatures"""
+  
   def __init__(self, mode, iterator, hparams):
     super().__init__()
 
-    #print(mode)
-    #print(iterator)
-    #print(hparams)
-    #exit()
     self.hparams = hparams
+    
+    print("")
     self.hparams.cell_size = [512, 1024, 2048]
+    self.hparams.max_string_length = 150  ##### TO BE EDITED in hparams
+    self.hparams.voc_size = 40
  
 
     self.voc_size = 40
     self.voc_emb_size = 32
-    #self.gru_layer_sizes = [512, 1024, 2048]
-    #print("To remove, just use hparams")
-    self.gru_layer_sizes = self.hparams.cell_size
     self.latent_size = 512
     
-    #vocab_file = "cddd/data/indices_char.npy"
     self.decode_vocabulary = { v: k for k, v in np.load(self.hparams.decode_vocabulary_file, allow_pickle=True).item().items() }
     self.decode_vocabulary_inv = { k: v for k, v in np.load(self.hparams.decode_vocabulary_file, allow_pickle=True).item().items() }
 
@@ -91,11 +88,11 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
     
     ### A stack of three TF-like GRUs
-    self.encoder_GRU = MultiGRU(self.voc_emb_size, self.gru_layer_sizes)
+    self.encoder_GRU = MultiGRU(self.voc_emb_size, self.hparams.cell_size)
     self.encoder_GRU.from_pretrained(pretrained_encoder_dict)
 
     ### Concatentation of outputs of each GRU layer seperately
-    self.encoder_dense_layer = nn.Linear(sum(self.gru_layer_sizes), self.latent_size)
+    self.encoder_dense_layer = nn.Linear(sum(self.hparams.cell_size), self.latent_size)
     with torch.no_grad():
       self.encoder_dense_layer.weight = nn.Parameter(torch.from_numpy(np.load("Encoder-dense-kernel.npy").T).float()) # [3584, 512]
       self.encoder_dense_layer.bias = nn.Parameter(torch.from_numpy(np.load("Encoder-dense-bias.npy")).float()) # [512]
@@ -111,7 +108,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
 
     
     ## Projection Layer that maps the final GRU output to token logits
-    self.decoder_projection = nn.Linear( self.gru_layer_sizes[-1] , self.voc_size, bias = False)
+    self.decoder_projection = nn.Linear( self.hparams.cell_size[-1] , self.voc_size, bias = False)
     with torch.no_grad():
       self.decoder_projection.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-decoder-dense-kernel.npy").T).float()) ## [2048, 40]
 
@@ -120,11 +117,11 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
 
     ### A stack of three TF-like GRUs
-    self.decoder_GRU = MultiGRU(self.voc_emb_size, self.gru_layer_sizes)
+    self.decoder_GRU = MultiGRU(self.voc_emb_size, self.hparams.cell_size)
     self.decoder_GRU.from_pretrained(pretrained_decoder_dict)
 
     ### Layer that takes latent vector to concatenated GRU history (h0) inputs
-    self.decoder_dense_layer = nn.Linear(self.latent_size, sum(self.gru_layer_sizes))
+    self.decoder_dense_layer = nn.Linear(self.latent_size, sum(self.hparams.cell_size))
     with torch.no_grad():
       self.decoder_dense_layer.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-kernel.npy").T).float()) # [512, 3584 = 512 + 1024 + 2048]
       self.decoder_dense_layer.bias = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-bias.npy")).float()) # [3584]
@@ -140,7 +137,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     else:
       input_seqs = torch.from_numpy(input_seqs).int()
     
-    h0 = [torch.zeros(i) for i in self.gru_layer_sizes]
+    h0 = [torch.zeros(i) for i in self.hparams.cell_size]
     encoder_emb_inp = self.encoder_embedding(input_seqs)
 
     ### TO be made batch friendly
@@ -156,22 +153,8 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #### Figure out a way to get a batch of torch embeddings?
     return np.array(embeddings)
 
-#class MiniCDDDDecoder(torch.nn.Module):
-#  """NoisyGRUSeq2SeqWithFeatures"""
-#  def __init__(self):
-#    super().__init__()
-#
-#    self.voc_emb_size = 32
-#    self.voc_size = 40
-#    self.gru_layer_sizes = [512, 1024, 2048]
-#    self.latent_size = 512
-#    
-
-#    vocab_file = "cddd/data/indices_char.npy"
-#    self.decode_vocabulary = { v: k for k, v in np.load(vocab_file, allow_pickle=True).item().items() }
-#    self.decode_vocabulary_inv = { k: v for k, v in np.load(vocab_file, allow_pickle=True).item().items() }
-
   def decode(self, input_vecs):
+    """ Convert latent vector to tokenized representation """
 
     if( type(input_vecs) == torch.Tensor):
       batch_size = input_vecs.size()[0]
@@ -182,91 +165,34 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     
     y = self.decoder_dense_layer(input_vecs)
 
-    #print("TO BE MADE ROBUST FOR general hparams.cell_size")
-    #h0 = [y[:,:512], y[:,512:512+1024], y[:,512+1024:]]
-
-    ## IF cell size is of the form [a,b,c,d,e,f,g]
     ## Size cum sum
     sizcs = [sum(self.hparams.cell_size[:i]) for i in range(len(self.hparams.cell_size)+1)]
-    #print(sizcs)
-    # Check 0, ... , sum(all)
-    ## h0 = [ y[:,:,:a], y[:, a : a+b], y[:, a+b : a+b+c]]
     h0 = [ y[:,sizcs[i]:sizcs[i+1]] for i in range(len(sizcs)-1)] # ---> Contender
-    #print(h0)
-    #print(h0_2)
-    #assert h0 == h0_2
 
-    #print("Check assert statements in models.py")
-    #exit()
-
-    x = np.array([39] * batch_size)
+    x = np.array([self.decode_vocabulary['<s>']] * batch_size)
     x = torch.from_numpy(x).int() ## Should this be long
-    x = self.encoder_embedding(x) ## x is length 32 using character encoding
+    x = self.encoder_embedding(x) ## [N, 32]
  
-    #all_logits = []
     all_strings = []
-    #print("TO BE MADE FRIENDLY FOR BATCHES [IN PROGRESS]")
 
-    #print("Move these to __init__ as least, but higher up in the chain")
-    self.hparams.max_string_length = 150  ##### TO BE EDITED in hparams
-    self.hparams.voc_size = 40
+    batch_logit_tensor = torch.zeros( [batch_size, self.hparams.voc_size , self.hparams.max_string_length - 1])  ### 10, 40, 149
 
-    #batch_logit_tensor = torch.zeros( [shape of fully padded array]) 
-    batch_logit_tensor = torch.zeros( [batch_size, self.hparams.voc_size , self.hparams.max_string_length - 1])  ### 10, 40 , 149
-    #print("make sure we avoid transpose later on")
-    #print(batch_logit_tensor.size())
-    ## Allocate slices based on the index
-
-    for i in range(batch_size):
-      #output_string = "<s>"
+    for i in range(batch_size): 
       output_string = ""
-      last_argmax = 39 ## I.e. start char
+      last_argmax = self.decode_vocabulary['<s>']
       count = 0
-      #xx, hh = x[i], [ h0[0][i], h0[1][i], h0[2][i]]
       xx, hh = x[i], [ h0[j][i] for j in range(len(self.hparams.cell_size))]
-      #compound_logits = []
+      
       while last_argmax != 0 and count < self.hparams.max_string_length:
         output, hh = self.decoder_GRU(xx, hh)
         logits = self.decoder_projection(output)  ### Taking from 2048 to [logits in 40]
-        #print(logits.size())
         batch_logit_tensor[i, :, count] = logits
-        #exit()
-        #compound_logits.append(logits.detach().numpy())
-        #batch_logit_tensor[i,] = logits
-        #print(torch.sum(F.softmax(logits)))
-        probs = torch.argmax(logits)  ### one hot in 40
+        probs = torch.argmax(logits)
         last_argmax = int(probs.detach().numpy()) 
         token = self.decode_vocabulary_inv[last_argmax]
         output_string += token
         xx = self.encoder_embedding(probs)
         count += 1
-      #print(output_string.replace("</s>",""))
       all_strings.append(output_string.replace("</s>",""))
-      #compound_logits = np.array(compound_logits)
-      #compound_logits = np.vstack([compound_logits, np.zeros([self.hparams.max_string_length - count - 1,40])])
-      #all_logits.append(compound_logits)
-
-    ### To return logits
     return batch_logit_tensor, all_strings
-
-### Some examples
-#test_inputs = np.load("test_in_seq.npy")
-#test_input_len = np.load("test_in_len.npy")
-#test_outputs = np.load("test_output_embeddings.npy")
-
-### Call the model
-#encoder = MiniCDDDInference()
-#outputs = encoder(test_inputs, test_input_len)
-
-#print(outputs)
-#print(outputs.shape)
-#print(test_outputs)
-
-
-#decoder = MiniCDDDDecoder()
-#outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
-
-
-
-
 
