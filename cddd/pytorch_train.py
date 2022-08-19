@@ -4,9 +4,9 @@ import torch.nn.functional as F
 
 from tqdm import tqdm
 
-from .data_structs import DatasetWithFeatures, Vocabulary
-from .models import NoisyGRUSeq2SeqWithFeatures
-from .utils import Variable
+from cddd.data_structs import DatasetWithFeatures, Vocabulary
+from cddd.models import NoisyGRUSeq2SeqWithFeatures
+from cddd.utils import Variable
 
 def train(hparams):
   """ Train Network Using Pytorch """
@@ -15,30 +15,13 @@ def train(hparams):
   #load_file = hparams.load_file#(else None)
   ## fix this to get everytihng from hparams
 
-  batch_size = hparams.batch_size ## 512 ?
+  #batch_size = hparams.batch_size ## 512 ?
   #data = DatasetWithFeatures(data_file, features_file)
 
 
-  model = NoisyGRUSeq2SeqWithFeatures("TRAIN", None, hparams)
-  vocab = Vocabulary(model.decode_vocabulary)   ### A bit like the Pipeline really
-  
-  #print(model.decode_vocabulary)
-  #for i in model.decode_vocabulary.keys():
-  #  print(i)
-  #vocab.add_characters(list(model.decode_vocabulary.keys()))
-  #print(vocab.__dict__)
-
-  #exit()
-  ### Possibly pass hparams to dataset as well!
-  data = DatasetWithFeatures(vocab, data_file)
-
-  ## Step to get the sequences and sequences length out and features
-  #loader = DatasetLoader(
-  #  data, 
-  #  batch_size = hparams.batch_size
-  #  shuffle = hparams.
-  #  drop_last = hparams.
-  #  collate_fn = Dataset_gen.collate_function)
+  model = NoisyGRUSeq2SeqWithFeatures(hparams)
+  #vocab = Vocabulary(model.decode_vocabulary)   ### A bit like the Pipeline really
+  data = DatasetWithFeatures(model, data_file)
 
 
   load_file = None

@@ -90,14 +90,22 @@ class Vocabulary(object):
 
 class DatasetWithFeatures(Dataset):
     #def __init__(self, voc, smi_file, vec_file):
-    def __init__(self, voc, smi_file):
+    def __init__(self, model, smi_file_or_list):
         """
         #Args:
         """
-        self.voc = voc
-        self.batch_size = 10 ### For testing purposes
+        self.voc = model.vocab
+        self.hparams = model.hparams
+        #self.batch_size = 10 ### For testing purposes
         self.max_length_smiles = 150
-        with open(smi_file) as f: self.smiles = [i.strip() for i in f.readlines()]
+        print("REMOVE CONCEPT OF MAX LENGTH SMILES")
+        if(isinstance(smi_file_or_list, str)):
+          with open(smi_file_or_list) as f: self.smiles = [i.strip() for i in f.readlines()]
+        elif(isinstance(smi_file_or_list, list)):
+          self.smiles = smi_file_or_list
+        else:
+          print("DatasetWithFeatures: Argument is list of smiles, or name of file containing smiles")
+          exit()
         #self.smiles = pd.read_csv(smi_file, header=0, dtype=str).values
         #self.smiles = [x[0] for x in self.smiles]
 
@@ -127,7 +135,7 @@ class DatasetWithFeatures(Dataset):
         return len(self.smiles)
 
     def __getitem__(self, i):
-        mols = np.random.choice(self.smiles, size = self.batch_size, replace = False)
+        mols = np.random.choice(self.smiles, size = min(self.hparams.batch_size,len(self.smiles)), replace = False)
         #vec = self.vectors[i]
         tokenized = [self.voc.tokenize(mol) for mol in mols]
         encoded = np.array([self.voc.encode(t) for t in tokenized])
@@ -148,81 +156,81 @@ class DatasetWithFeatures(Dataset):
     #        #collated_arr_vec[i, :data[1].size(0)] = data[1]
     #    return collated_arr_smi#, collated_arr_vec
 
-class Experience(object):
-    """Class for prioritized experience replay that remembers the highest scored sequences
-       seen and samples from them with probabilities relative to their scores."""
-    def __init__(self, voc, max_size=100):
-        self.memory = []
-        self.max_size = max_size
-        self.voc = voc
-
-    def add_experience(self, experience):
-        """Experience should be a list of (smiles, score, prior likelihood) tuples"""
-        self.memory.extend(experience)
-        if len(self.memory)>self.max_size:
-            # Remove duplicates
-            idxs, smiles = [], []
-            for i, exp in enumerate(self.memory):
-                if exp[0] not in smiles:
-                    idxs.append(i)
-                    smiles.append(exp[0])
-            self.memory = [self.memory[idx] for idx in idxs]
-            # Retain highest scores
-            self.memory.sort(key = lambda x: x[1], reverse=True)
-            self.memory = self.memory[:self.max_size]
-            print("\nBest score in memory: {:.2f}".format(self.memory[0][1]))
-
-    def sample(self, n):
-        """Sample a batch size n of experience"""
-        if len(self.memory)<n:
-            raise IndexError('Size of memory ({}) is less than requested sample ({})'.format(len(self), n))
-        else:
-            scores = [x[1] for x in self.memory]
-            sample = np.random.choice(len(self), size=n, replace=False, p=scores/np.sum(scores))
-            sample = [self.memory[i] for i in sample]
-            smiles = [x[0] for x in sample]
-            scores = [x[1] for x in sample]
-            prior_likelihood = [x[2] for x in sample]
-        tokenized = [self.voc.tokenize(smile) for smile in smiles]
-        encoded = [Variable(self.voc.encode(tokenized_i)) for tokenized_i in tokenized]
-        encoded = MolData.collate_fn(encoded)
-        return encoded, np.array(scores), np.array(prior_likelihood)
-
-    def initiate_from_file(self, fname, scoring_function, Prior):
-        """Adds experience from a file with SMILES
-           Needs a scoring function and an RNN to score the sequences.
-           Using this feature means that the learning can be very biased
-           and is typically advised against."""
-        with open(fname, 'r') as f:
-            smiles = []
-            for line in f:
-                smile = line.split()[0]
-                if Chem.MolFromSmiles(smile):
-                    smiles.append(smile)
-        scores = scoring_function(smiles)
-        tokenized = [self.voc.tokenize(smile) for smile in smiles]
-        encoded = [Variable(self.voc.encode(tokenized_i)) for tokenized_i in tokenized]
-        encoded = MolData.collate_fn(encoded)
-        prior_likelihood, _ = Prior.likelihood(encoded.long())
-        prior_likelihood = prior_likelihood.data.cpu().numpy()
-        new_experience = zip(smiles, scores, prior_likelihood)
-        self.add_experience(new_experience)
-
-    def print_memory(self, path):
-        """Prints the memory."""
-        print("\n" + "*" * 80 + "\n")
-        print("         Best recorded SMILES: \n")
-        print("Score     Prior log P     SMILES\n")
-        with open(path, 'w') as f:
-            f.write("SMILES Score PriorLogP\n")
-            for i, exp in enumerate(self.memory[:100]):
-                if i < 50:
-                    print("{:4.2f}   {:6.2f}        {}".format(exp[1], exp[2], exp[0]))
-                    f.write("{} {:4.2f} {:6.2f}\n".format(*exp))
-        print("\n" + "*" * 80 + "\n")
-
-    def __len__(self):
-        return len(self.memory)
+#class Experience(object):
+#    """Class for prioritized experience replay that remembers the highest scored sequences
+#       seen and samples from them with probabilities relative to their scores."""
+#    def __init__(self, voc, max_size=100):
+#        self.memory = []
+#        self.max_size = max_size
+#        self.voc = voc
+#
+#    def add_experience(self, experience):
+#        """Experience should be a list of (smiles, score, prior likelihood) tuples"""
+#        self.memory.extend(experience)
+#        if len(self.memory)>self.max_size:
+#            # Remove duplicates
+#            idxs, smiles = [], []
+#            for i, exp in enumerate(self.memory):
+#                if exp[0] not in smiles:
+#                    idxs.append(i)
+#                    smiles.append(exp[0])
+#            self.memory = [self.memory[idx] for idx in idxs]
+#            # Retain highest scores
+#            self.memory.sort(key = lambda x: x[1], reverse=True)
+#            self.memory = self.memory[:self.max_size]
+#            print("\nBest score in memory: {:.2f}".format(self.memory[0][1]))
+#
+#    def sample(self, n):
+#        """Sample a batch size n of experience"""
+#        if len(self.memory)<n:
+#            raise IndexError('Size of memory ({}) is less than requested sample ({})'.format(len(self), n))
+#        else:
+#            scores = [x[1] for x in self.memory]
+#            sample = np.random.choice(len(self), size=n, replace=False, p=scores/np.sum(scores))
+#            sample = [self.memory[i] for i in sample]
+#            smiles = [x[0] for x in sample]
+#            scores = [x[1] for x in sample]
+#            prior_likelihood = [x[2] for x in sample]
+#        tokenized = [self.voc.tokenize(smile) for smile in smiles]
+#        encoded = [Variable(self.voc.encode(tokenized_i)) for tokenized_i in tokenized]
+#        encoded = MolData.collate_fn(encoded)
+#        return encoded, np.array(scores), np.array(prior_likelihood)
+#
+#    def initiate_from_file(self, fname, scoring_function, Prior):
+#        """Adds experience from a file with SMILES
+#           Needs a scoring function and an RNN to score the sequences.
+#           Using this feature means that the learning can be very biased
+#           and is typically advised against."""
+#        with open(fname, 'r') as f:
+#            smiles = []
+#            for line in f:
+#                smile = line.split()[0]
+#                if Chem.MolFromSmiles(smile):
+#                    smiles.append(smile)
+#        scores = scoring_function(smiles)
+#        tokenized = [self.voc.tokenize(smile) for smile in smiles]
+#        encoded = [Variable(self.voc.encode(tokenized_i)) for tokenized_i in tokenized]
+#        encoded = MolData.collate_fn(encoded)
+#        prior_likelihood, _ = Prior.likelihood(encoded.long())
+#        prior_likelihood = prior_likelihood.data.cpu().numpy()
+#        new_experience = zip(smiles, scores, prior_likelihood)
+#        self.add_experience(new_experience)
+#
+#    def print_memory(self, path):
+#        """Prints the memory."""
+#        print("\n" + "*" * 80 + "\n")
+#        print("         Best recorded SMILES: \n")
+#        print("Score     Prior log P     SMILES\n")
+#        with open(path, 'w') as f:
+#            f.write("SMILES Score PriorLogP\n")
+#            for i, exp in enumerate(self.memory[:100]):
+#                if i < 50:
+#                    print("{:4.2f}   {:6.2f}        {}".format(exp[1], exp[2], exp[0]))
+#                    f.write("{} {:4.2f} {:6.2f}\n".format(*exp))
+#        print("\n" + "*" * 80 + "\n")
+#
+#    def __len__(self):
+#        return len(self.memory)
 
 def replace_halogen(string):
     """Regex to replace Br and Cl with single letters"""

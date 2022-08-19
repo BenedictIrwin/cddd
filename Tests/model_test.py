@@ -4,6 +4,7 @@ import os
 
 from cddd.models import *
 from cddd.hyperparameters import create_hparams
+from cddd.data_structs import DatasetWithFeatures  
 
 def test_model_from_pretrained():
   """ Simple test of using model"""
@@ -40,16 +41,29 @@ def test_TF1_embedding_equivalence():
   ### Get hparams
   hparams = create_hparams()
   print(hparams)
-  exit()
+  hparams.pytorch_weights_file = os.getcwd() + "pytorch_weights_image.sav"
+  hparams.cell_size = [512, 1024, 2048]
+  hparams.max_string_length = 150  ##### TO BE EDITED in hparams
+  hparams.voc_size = 40
+  hparams.emb_size = 512
 
-  hparams.weights_file = "pretrained."
   ### Initalise model with pretrained weights
   model = NoisyGRUSeq2SeqWithFeatures(hparams)
+  model.load("pretrained_cddd_model.sav")
+  #model.save("pretrained_cddd_model.sav")
 
   ### Define dataset
-  input_smiles = []
+  input_smiles = ["CCCC","c1ccccc1"]
+  print("An option to take a simple list in dataset wth features")
+  data = DatasetWithFeatures(model, input_smiles)
+  print("An option to take a dataset as input?")
+  for smiles, lens in data:
+    embedding = model.encode(smiles,lens)
+    print(embedding)
+    exit()
+  print(output_embeddings)
 
-  output_embeddings = model.encode(input_smiles)
+  exit()
   ### Call model on smiles to get embeddings
 
   assert torch.allclose(output_embeddings, answers_embeddings_TF1)

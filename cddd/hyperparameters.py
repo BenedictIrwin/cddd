@@ -160,8 +160,6 @@ def create_hparams():
       div_loss_scale=1.0,
       div_loss_rate=0.9,
     )
-    print(hparams)
-    exit()
     hparams.add_hparam("encode_vocabulary_file", os.path.join(DEFAULT_DATA_DIR, "indices_char.npy"))
     hparams.add_hparam("decode_vocabulary_file", os.path.join(DEFAULT_DATA_DIR, "indices_char.npy"))
     hparams_file_name = os.path.join(hparams.save_dir, 'hparams.json')
