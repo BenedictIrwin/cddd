@@ -5,28 +5,29 @@ import os
 from cddd.models import *
 from cddd.hyperparameters import create_hparams
 from cddd.data_structs import DatasetWithFeatures  
+from tqdm import tqdm
 
-def test_model_from_pretrained():
-  """ Simple test of using model"""
+#def test_model_from_pretrained():
+#  """ Simple test of using model"""
+#
+#  model_dir = ""
+#  ## Check of os.enviroment_var["CUDA DEVICES"] ---> True
+#  for use_gpu in [False, True]:
+#    infer_model = InferenceModel(model_dir = model_dir, use_gpu = use_gpu, batch_size = 3, cpu_threads = 1)
+#    smiles = ["CCCCC","C","CC","c1ccccc1"]
+#    result = infer_model.seq_to_emb(smiles)
+#    print(result)
+#
+#    assert 1 == 1 ### To build result based check
 
-  model_dir = ""
-  ## Check of os.enviroment_var["CUDA DEVICES"] ---> True
-  for use_gpu in [False, True]:
-    infer_model = InferenceModel(model_dir = model_dir, use_gpu = use_gpu, batch_size = 3, cpu_threads = 1)
-    smiles = ["CCCCC","C","CC","c1ccccc1"]
-    result = infer_model.seq_to_emb(smiles)
-    print(result)
+#def test_model_init():
+#  """ Test the initialisation of a model """
+#
+#  #hparams = {}
+#  print("TO REMOVE iterator and mode from model")
+#  model = NoisyGRUSeq2SeqWithFeatures(hparams)
 
-    assert 1 == 1 ### To build result based check
-
-def test_model_init():
-  """ Test the initialisation of a model """
-
-  #hparams = {}
-  print("TO REMOVE iterator and mode from model")
-  model = NoisyGRUSeq2SeqWithFeatures("ENCODE", None, hparams)
-
-  ### Do some checks
+#  ### Do some checks
     
 
 def test_TF1_embedding_equivalence():
@@ -34,46 +35,34 @@ def test_TF1_embedding_equivalence():
 
   answers_embeddings_TF1 = torch.from_numpy(np.load("test_output_embeddings.npy"))
 
-  print(answers_embeddings_TF1)
-  print(answers_embeddings_TF1.size())
-
-
-  ### Get hparams
   hparams = create_hparams()
-  print(hparams)
-  hparams.pytorch_weights_file = os.getcwd() + "pytorch_weights_image.sav"
   hparams.cell_size = [512, 1024, 2048]
   hparams.max_string_length = 150  ##### TO BE EDITED in hparams
   hparams.voc_size = 40
   hparams.emb_size = 512
+  hparams.batch_size = 64 ## As longa as > 7 it will work
 
-  ### Initalise model with pretrained weights
   model = NoisyGRUSeq2SeqWithFeatures(hparams)
   model.load("pretrained_cddd_model.sav")
-  #model.save("pretrained_cddd_model.sav")
 
-  ### Define dataset
-  input_smiles = ["CCCC","c1ccccc1"]
-  print("An option to take a simple list in dataset wth features")
+  input_smiles = [
+    "C[n+]1c2ccccc2c(N)c2ccccc21",
+    "c1ccc2cnccc2c1",
+    "Cc1c(N)cccc1[N+](=O)[O-]",
+    "CCCNc1c([N+](=O)[O-])ccc(Cl)c1C(=O)O",
+    "CNC(=O)N(C)N=O",
+    "Nc1cccc2c1C(=O)c1ccccc1C2=O",
+    "CC(=O)C1(C)OC12C=Cc1ccccc1C2=O"]
+  
   data = DatasetWithFeatures(model, input_smiles)
-  print("An option to take a dataset as input?")
-  for smiles, lens in data:
-    embedding = model.encode(smiles,lens)
-    print(embedding)
-    exit()
-  print(output_embeddings)
+  smiles, lens = data[0]
+  output_embeddings = model.encode(smiles,lens)
 
-  exit()
-  ### Call model on smiles to get embeddings
+  assert torch.allclose(output_embeddings, answers_embeddings_TF1, rtol = 1e-04, atol = 1e-06)
 
-  assert torch.allclose(output_embeddings, answers_embeddings_TF1)
-
-  ### Reconstruct the SMILES
-  #logits, output_smiles = model.decode(output_embeddings) 
   _, output_smiles = model.decode(output_embeddings) 
 
   assert output_smiles == input_smiles
-
 
 
 def test_training():
@@ -121,10 +110,10 @@ def test_qsar():
 #outputs = decoder(outputs)  ## Input N x 512 vectors... generate compounds
 
 test_TF1_embedding_equivalence()
-exit()
+#exit()
 
 ### Run tests
-test_model_from_pretrained()
+#test_model_from_pretrained()
 test_training()
 
 

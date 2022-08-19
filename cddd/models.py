@@ -36,7 +36,6 @@ class TFGRUCell(torch.nn.Module):
     self.in_size = in_size
     self.out_size = out_size
     
-    print("TO Initialize correctly")
     with torch.no_grad():
       self._gate_kernel      = nn.Parameter(torch.from_numpy(np.random.rand(self.in_size + self.out_size, 2* self.out_size)).float())
       self._gate_bias        = nn.Parameter(torch.from_numpy(np.random.rand(2 * self.out_size)).float())
@@ -221,7 +220,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
 
   def load(self, file_name = None):
     if(file_name):
-      torch.load(file_name)
+      self.load_state_dict(torch.load(file_name))
     else:
-      torch.load(self.hparams.sav_dir + "savfile.sav")
+      self.load_state_dict(torch.load(self.hparams.sav_dir + "savfile.sav"))
 

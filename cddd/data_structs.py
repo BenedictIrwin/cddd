@@ -88,7 +88,7 @@ class Vocabulary(object):
         return "Vocabulary containing {} tokens: {}".format(len(self), self.chars)
 
 
-class DatasetWithFeatures(Dataset):
+class DatasetWithFeatures():
     #def __init__(self, voc, smi_file, vec_file):
     def __init__(self, model, smi_file_or_list):
         """
@@ -130,19 +130,28 @@ class DatasetWithFeatures(Dataset):
         #self.vectors = (self.vectors - self.mew) / self.std
 
     def __len__(self):
-        #if len(self.smiles) != len(self.vectors):
-        #    raise ValueError('Smiles and Vector lengths mismatched')
-        return len(self.smiles)
+      """ The number of mini-batches in the dataset """
+      return int(np.ceil(len(self.smiles)/self.hparams.batch_size))
 
     def __getitem__(self, i):
-        mols = np.random.choice(self.smiles, size = min(self.hparams.batch_size,len(self.smiles)), replace = False)
-        #vec = self.vectors[i]
-        tokenized = [self.voc.tokenize(mol) for mol in mols]
-        encoded = np.array([self.voc.encode(t) for t in tokenized])
-        lengths = np.array([len(enc) for enc in encoded])
-        encoded = np.array([np.pad(enc,(0,self.max_length_smiles - len(enc))) for enc in encoded])
-        #return [Variable(encoded), Variable(vec)]
-        return Variable(encoded).int(), Variable(lengths).int()
+      """ Returns mini-batch i as a pair of input tensors """
+      #if(self.shuffle):
+      #  mols = np.random.choice(self.smiles, size = min(self.hparams.batch_size,len(self.smiles)), replace = False)
+      #else:
+      #  mols = 
+      #vec = self.vectors[i]
+      if(i == len(self) - 1):
+        """ The final, potentially incomplete mini-batch """
+        mols = self.smiles[i*self.hparams.batch_size:]
+      else:
+        mols = self.smiles[i*self.hparams.batch_size:(i+1)*self.hparams.batch_size]
+
+      tokenized = [self.voc.tokenize(mol) for mol in mols]
+      encoded = np.array([self.voc.encode(t) for t in tokenized])
+      lengths = np.array([len(enc) for enc in encoded])
+      encoded = np.array([np.pad(enc,(0,self.max_length_smiles - len(enc))) for enc in encoded])
+      #return [Variable(encoded), Variable(vec)]
+      return Variable(encoded).int(), Variable(lengths).int()
 
     #@classmethod
     #def collate_fn(cls, arr):
