@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from utils import Variable
+from cddd.utils import Variable
 
 class MultiGRU(torch.nn.Module):
   """Stacked version of MultiGRU with TF like weight structure"""

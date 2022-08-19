@@ -115,7 +115,53 @@ def create_hparams():
         div_loss_rate=flags.div_loss_rate,
     )
     """
-    hparams = HParams()
+    hparams = HParams(
+      model="NoisyGRUSeq2SeqWithFeatures",
+      input_pipeline="InputPipelineWithFeatures",
+      input_sequence_key="random_smiles",
+      output_sequence_key="canonical_smiles",
+      cell_size=[128],
+      emb_size=128,
+      learning_rate=0.0005,
+      save_dir=os.path.join(DEFAULT_DATA_DIR, 'default_model'),
+      device="-1",
+      gpu_mem_frac=1.0,
+      num_steps=250000,
+      summary_freq=1000,
+      inference_freq=5000,
+      batch_size=64,
+      one_hot_embedding=False,
+      char_embedding_size=32,
+      train_file="../data/pretrain_dataset.tfrecords",
+      val_file="../data/pretrain_dataset_val.tfrecords",
+      infer_file="../data/val_dataset_preprocessed3.csv",
+      allow_soft_placement=True,
+      cpu_threads=5,
+      overwrite_saves=False,
+      input_dropout=0.0,
+      emb_noise=0.0,
+      kernel_size=[2],
+      conv_hidden_size=[128],
+      reverse_decoding=False,
+      buffer_size=10000,
+      lr_decay=True,
+      lr_decay_frequency=50000,
+      lr_decay_factor=0.9,
+      num_buckets=8.,
+      min_bucket_length=20.0,
+      max_bucket_length=60.0,
+      num_features=7,
+      save_hparams=True,
+      hparams_from_file=False,
+      hparams_file_name=None,
+      rand_input_swap=False,
+      infer_input="random",
+      emb_activation="tanh",
+      div_loss_scale=1.0,
+      div_loss_rate=0.9,
+    )
+    print(hparams)
+    exit()
     hparams.add_hparam("encode_vocabulary_file", os.path.join(DEFAULT_DATA_DIR, "indices_char.npy"))
     hparams.add_hparam("decode_vocabulary_file", os.path.join(DEFAULT_DATA_DIR, "indices_char.npy"))
     hparams_file_name = os.path.join(hparams.save_dir, 'hparams.json')

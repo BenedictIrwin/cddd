@@ -32,7 +32,11 @@ def test_TF1_embedding_equivalence():
   """ Test the embedded vectors are close to TF1 fixed values """
 
   answers_embeddings_TF1 = torch.from_numpy(np.load("test_output_embeddings.npy"))
- 
+
+  print(answers_embeddings_TF1)
+  print(answers_embeddings_TF1.size())
+
+
   ### Get hparams
   hparams = create_hparams()
   print(hparams)
