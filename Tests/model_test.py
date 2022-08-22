@@ -44,6 +44,8 @@ def test_TF1_embedding_equivalence():
 
   model = NoisyGRUSeq2SeqWithFeatures(hparams)
   model.load("pretrained_cddd_model.sav")
+  #model.save("pretrained_cddd_model.sav")
+
 
   input_smiles = [
     "C[n+]1c2ccccc2c(N)c2ccccc21",
@@ -58,12 +60,16 @@ def test_TF1_embedding_equivalence():
   smiles, lens = data[0]
   output_embeddings = model.encode(smiles,lens)
 
+  #print(output_embeddings)
+  #print(answers_embeddings_TF1)
+
   assert torch.allclose(output_embeddings, answers_embeddings_TF1, rtol = 1e-04, atol = 1e-06)
 
   _, output_smiles = model.decode(output_embeddings) 
 
   assert output_smiles == input_smiles
-
+  #print("QUtting here")
+  #exit()
 
 def test_training():
   """ A test to train a model from initialised state """

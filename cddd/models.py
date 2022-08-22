@@ -10,23 +10,34 @@ class MultiGRU(torch.nn.Module):
   """Stacked version of MultiGRU with TF like weight structure"""
   def __init__(self, voc_size, latent_vec_sizes):
     super(MultiGRU, self).__init__()
-    self.gru_0 = TFGRUCell(voc_size, latent_vec_sizes[0])
-    self.gru_1 = TFGRUCell(latent_vec_sizes[0], latent_vec_sizes[1])
-    self.gru_2 = TFGRUCell(latent_vec_sizes[1], latent_vec_sizes[2])
+    self.latent_vec_sizes = latent_vec_sizes
+    siz = [voc_size] + latent_vec_sizes
+    self.grus = nn.ModuleDict({ "gru_{}".format(i) : TFGRUCell(siz[i],siz[i+1]) for i in range(len(latent_vec_sizes))})
+    #self.grus = nn.ModuleList([ TFGRUCell(siz[i],siz[i+1]) for i in range(len(latent_vec_sizes))])
+
+     
+    #self.gru_0 = TFGRUCell(voc_size, latent_vec_sizes[0])
+    #self.gru_1 = TFGRUCell(latent_vec_sizes[0], latent_vec_sizes[1])
+    #self.gru_2 = TFGRUCell(latent_vec_sizes[1], latent_vec_sizes[2])
   
   def forward(self, x, h):
     """Run the three GRU cells with zero input"""
-    h_new = [0,0,0]
-    x = h_new[0] = self.gru_0(x, h[0])
-    x = h_new[1] = self.gru_1(x, h[1])
-    x = h_new[2] = self.gru_2(x, h[2])
+    #h_new = [0,0,0]
+    h_new = [0 for i in self.latent_vec_sizes]
+    for i in range(len(self.latent_vec_sizes)):
+      x = h_new[i] = self.grus["gru_{}".format(i)](x, h[i])
+    #x = h_new[0] = self.gru_0(x, h[0])
+    #x = h_new[1] = self.gru_1(x, h[1])
+    #x = h_new[2] = self.gru_2(x, h[2])
     return x, h_new
 
   def from_pretrained(self, pretrained):
     """Loads up from gate and candidate kernels and biases K_g, K_c, b_g, b_c"""
-    self.gru_0.from_pretrained(pretrained["gru_0"])
-    self.gru_1.from_pretrained(pretrained["gru_1"])
-    self.gru_2.from_pretrained(pretrained["gru_2"])
+    for i in range(len(self.latent_vec_sizes)):
+      self.grus["gru_{}".format(i)].from_pretrained(pretrained["gru_{}".format(i)])
+    #self.gru_0.from_pretrained(pretrained["gru_0"])
+    #self.gru_1.from_pretrained(pretrained["gru_1"])
+    #self.gru_2.from_pretrained(pretrained["gru_2"])
 
 class TFGRUCell(torch.nn.Module):
   """A GRU Cell made to work exactly as the TF version"""
@@ -86,7 +97,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     self.decode_vocabulary_inv = { k: v for k, v in np.load(self.hparams.decode_vocabulary_file, allow_pickle=True).item().items() }
     self.vocab = Vocabulary(self.decode_vocabulary)
 
-    ## Load pretrained weights
+    # Load pretrained weights
     #pretrained_encoder_dict = {}
     #for i in ["0","1","2"]:
     #  pretrained_encoder_dict["gru_{}".format(i)] = {}
@@ -95,9 +106,9 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #      file_name = "Encoder/rnn/multi_rnn_cell/cell_{}/gru_cell/{}/{}.npy".format(i,j,k).replace("/","-")
     #      pretrained_encoder_dict["gru_{}".format(i)]["{}-{}".format(j,k)] = np.load(file_name)
 
-     
+    print("Fix Hardcoded values!!! models.py")
     self.encoder_embedding = nn.Embedding(40, 32)
-    #pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
+    pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
     #self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
     
     ### A stack of three TF-like GRUs

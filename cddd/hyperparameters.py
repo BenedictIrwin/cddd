@@ -131,6 +131,7 @@ def create_hparams():
       inference_freq=5000,
       batch_size=64,
       one_hot_embedding=False,
+      voc_size=40,
       char_embedding_size=32,
       train_file="../data/pretrain_dataset.tfrecords",
       val_file="../data/pretrain_dataset_val.tfrecords",

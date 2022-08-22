@@ -54,7 +54,8 @@ def train_loop(train_model, eval_model, encoder_model, hparams):
 
 def main(unused_argv):
     """Main function that trains and evaluats the translation model"""
-    hparams = create_hparams(FLAGS)
+    #hparams = create_hparams(FLAGS)
+    hparams = create_hparams()
     os.environ['CUDA_VISIBLE_DEVICES'] = str(hparams.device)
     
     #train_model, eval_model, encode_model = build_models(hparams)
