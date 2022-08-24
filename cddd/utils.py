@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from rdkit import Chem
-import subprocess
-import pandas
+#import subprocess
+#import pandas
 
 def Variable(tensor):
     """Wrapper for torch.autograd.Variable that also accepts
@@ -45,10 +45,10 @@ def unique(arr):
         return torch.LongTensor(np.sort(idxs)).cuda()
     return torch.LongTensor(np.sort(idxs))
 
-def get_moments(vectors):
-    vectors = vectors.transpose()
-    mew = np.array([np.average(x) for x in vectors]).transpose()
-    std = np.array([np.std(x) for x in vectors]).transpose()
-    return mew, std
+#def get_moments(vectors):
+#    vectors = vectors.transpose()
+#    mew = np.array([np.average(x) for x in vectors]).transpose()
+#    std = np.array([np.std(x) for x in vectors]).transpose()
+#    return mew, std
 
 

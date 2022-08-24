@@ -132,6 +132,7 @@ def create_hparams():
       batch_size=64,
       one_hot_embedding=False,
       voc_size=40,
+      max_length_smiles=150,
       char_embedding_size=32,
       train_file="../data/pretrain_dataset.tfrecords",
       val_file="../data/pretrain_dataset_val.tfrecords",

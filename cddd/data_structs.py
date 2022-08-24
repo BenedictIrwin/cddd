@@ -149,7 +149,7 @@ class DatasetWithFeatures():
       tokenized = [self.voc.tokenize(mol) for mol in mols]
       encoded = np.array([self.voc.encode(t) for t in tokenized])
       lengths = np.array([len(enc) for enc in encoded])
-      encoded = np.array([np.pad(enc,(0,self.max_length_smiles - len(enc))) for enc in encoded])
+      encoded = np.array([np.pad(enc,(0,self.hparams.max_length_smiles - len(enc))) for enc in encoded])
       #return [Variable(encoded), Variable(vec)]
       return Variable(encoded).int(), Variable(lengths).int()
 

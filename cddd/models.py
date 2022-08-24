@@ -6,7 +6,19 @@ import numpy as np
 from cddd.utils import Variable
 from cddd.data_structs import Vocabulary
 
-class MultiGRU(torch.nn.Module):
+### TRAINING
+#import torch
+#from torch.utils.data import DataLoader
+#import torch.nn.functional as F
+
+from tqdm import tqdm
+
+#from cddd.data_structs import DatasetWithFeatures, Vocabulary
+#from cddd.models import NoisyGRUSeq2SeqWithFeatures
+#from cddd.utils import Variable
+
+
+class MultiGRU(nn.Module):
   """Stacked version of MultiGRU with TF like weight structure"""
   def __init__(self, voc_size, latent_vec_sizes):
     super(MultiGRU, self).__init__()
@@ -39,7 +51,7 @@ class MultiGRU(torch.nn.Module):
     #self.gru_1.from_pretrained(pretrained["gru_1"])
     #self.gru_2.from_pretrained(pretrained["gru_2"])
 
-class TFGRUCell(torch.nn.Module):
+class TFGRUCell(nn.Module):
   """A GRU Cell made to work exactly as the TF version"""
   def __init__(self, in_size, out_size):
     super().__init__()
@@ -83,7 +95,7 @@ class TFGRUCell(torch.nn.Module):
     candidate = torch.matmul(torch.cat([x, r_state]), self._candidate_kernel) + self._candidate_bias
     return z * h + (1 - z) * self._activation(candidate)
 
-class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
+class NoisyGRUSeq2SeqWithFeatures(nn.Module):
   """NoisyGRUSeq2SeqWithFeatures"""
   
   def __init__(self, hparams):
@@ -91,11 +103,10 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
 
     self.hparams = hparams
     
-    print("TO REMOVE CONCEPT OF MAX STRING LENGTH!")
-
     self.decode_vocabulary = { v: k for k, v in np.load(self.hparams.decode_vocabulary_file, allow_pickle=True).item().items() }
     self.decode_vocabulary_inv = { k: v for k, v in np.load(self.hparams.decode_vocabulary_file, allow_pickle=True).item().items() }
     self.vocab = Vocabulary(self.decode_vocabulary)
+  
 
     # Load pretrained weights
     #pretrained_encoder_dict = {}
@@ -106,9 +117,8 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #      file_name = "Encoder/rnn/multi_rnn_cell/cell_{}/gru_cell/{}/{}.npy".format(i,j,k).replace("/","-")
     #      pretrained_encoder_dict["gru_{}".format(i)]["{}-{}".format(j,k)] = np.load(file_name)
 
-    print("Fix Hardcoded values!!! models.py")
-    self.encoder_embedding = nn.Embedding(40, 32)
-    pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
+    self.encoder_embedding = nn.Embedding(self.hparams.voc_size, self.hparams.char_embedding_size)
+    #pretrained_embedding = torch.from_numpy(np.load("char_embedding.npy")).float()
     #self.encoder_embedding = nn.Embedding.from_pretrained(pretrained_embedding) # [40, 32]
     
     ### A stack of three TF-like GRUs
@@ -146,12 +156,13 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     #  self.decoder_dense_layer.weight = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-kernel.npy").T).float()) # [512, 3584 = 512 + 1024 + 2048]
     #  self.decoder_dense_layer.bias = nn.Parameter(torch.from_numpy(np.load("Decoder-dense-bias.npy")).float()) # [3584]
     
+    self.optimizer = torch.optim.Adam(self.parameters(), lr = self.hparams.lr)
+    self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma = self.hparams.lr_decay_frequency)
+    
 
   ### Embed some tokenized strings
   def encode(self, input_seqs, input_lens):
     """Encode sequences to latent vectors given lengths"""
-    #print(input_seqs.type)
-    #print(input_lens.type)
 
     if( type(input_seqs) == torch.Tensor):
       batch_size = input_seqs.size()[0]
@@ -160,16 +171,9 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
       input_seqs = torch.from_numpy(input_seqs).int()
     
     h0 = [torch.zeros(i) for i in self.hparams.cell_size]
-
-    print("Load file has failed to define this, so need to define it on init")
     encoder_emb_inp = self.encoder_embedding(input_seqs)
-    #print(encoder_emb_inp)
-    #print(encoder_emb_inp.size())
-    #exit()
-
-    print("MAKE ENCODING BATCH FRIENDLY USING torch.zeros of the right shape")
-    ### TO be made batch friendly
     embeddings = torch.zeros([batch_size, self.hparams.emb_size])
+    
     count = 0
     for compound_emb, length in zip(encoder_emb_inp, input_lens):
       encoder_state = h0
@@ -182,7 +186,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     return embeddings
 
   def decode(self, input_vecs):
-    """ Convert latent vector to tokenized representation """
+    """Convert latent vector to tokenized representation"""
 
     if( type(input_vecs) == torch.Tensor):
       batch_size = input_vecs.size()[0]
@@ -209,7 +213,7 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
       count = 0
       xx, hh = x[i], [ h0[j][i] for j in range(len(self.hparams.cell_size))]
       
-      while last_argmax != 0 and count < self.hparams.max_string_length:
+      while last_argmax != 0 and count < self.hparams.max_string_length - 1:
         output, hh = self.decoder_GRU(xx, hh)
         logits = self.decoder_projection(output)
         batch_logit_tensor[i, :, count] = logits
@@ -223,15 +227,61 @@ class NoisyGRUSeq2SeqWithFeatures(torch.nn.Module):
     return batch_logit_tensor, all_strings
 
   def save(self, file_name = None):
-    """ Save out model state to file """
+    """ Save model state to file, or default in hparams"""
     if(file_name):
       torch.save(self.state_dict(), file_name)
     else:
       torch.save(self.state_dict(), self.hparams.sav_dir + "savfile.sav")
 
   def load(self, file_name = None):
+    """Load model state from file, or default in hparams"""
     if(file_name):
       self.load_state_dict(torch.load(file_name))
     else:
       self.load_state_dict(torch.load(self.hparams.sav_dir + "savfile.sav"))
+
+  def calc_loss(self, target_len, target_seq, logits):
+    """Return the loss shifted sequence cross entropy loss over the mini-batch"""
+    shifted_target_len = target_len - 1
+    shifted_target_seq = target_seq[0:,1:].long()
+    target_mask = torch.arange(target_seq.size()[1] - 1)[None, :] < shifted_target_len[:, None]
+    target_mask = target_mask / torch.sum(target_mask)
+    loss = F.cross_entropy(logits, shifted_target_seq, reduction = 'none')   ### grab from the file ## Check the order
+    loss = torch.sum(loss * target_mask)
+    return loss
+
+  def train(self, dataset):
+    """Train on the given dataset, according to the hparams"""
+
+    for epoch in range(self.hparams.num_epochs):
+      for step, (seq1, seq1_len) in tqdm( enumerate(dataset), total = len(dataset)):
+
+        input_seq = torch.tensor(seq1)
+        input_len = torch.tensor(seq1_len)
+        target_seq = torch.tensor(seq1)
+        target_len = torch.tensor(seq1_len)
+
+        embedding = self.encode( input_seq, input_len )
+        logits, strings = self.decode(embedding)
+        loss = self.calc_loss(target_len, target_seq, logits)
+        loss.backward()
+        self.optimizer.step()
+
+        ### Check perforemance and save a checkpoint of the model
+        if( step % self.hparams.summary_freq and step != 0 ):
+          #decrease_learning_rate(optimizer, decrease_by = ... torch.exponentiallrscehdulaer?)
+          tqdm.write("#" * 49)
+          tqdm.write("Ep. {:4d}, step {:4d}, loss {:5.3f}\n".format(epoch, step, loss.data.item()))
+          #x, y, z = model.sample(batch_size, vecs) ### ????
+          ### Get num valid
+          ###
+          ###
+          ##
+          ####
+          tqdm.write("#"* 49)
+          torch.save(self.state_dict(), self.hparams.save_file)
+
+
+if __name__ == "__main__":
+  train()
 

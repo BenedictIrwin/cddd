@@ -10,13 +10,9 @@ from cddd.utils import Variable
 
 def train(hparams):
   """ Train Network Using Pytorch """
+  
   data_file = "./guacamol_v1_train_subset.smiles"
   save_file = "test_save.sav"
-  #load_file = hparams.load_file#(else None)
-  ## fix this to get everytihng from hparams
-
-  #batch_size = hparams.batch_size ## 512 ?
-  #data = DatasetWithFeatures(data_file, features_file)
 
 
   model = NoisyGRUSeq2SeqWithFeatures(hparams)
@@ -37,18 +33,8 @@ def train(hparams):
   ### TF has a weird gradient clipping step... 
 
   for epoch in range(hparams.num_steps):
-    #for step, (smiles_batch, vec_batch, features_batch) in tqdm( enumerate(loader), total = len(loader)):
-    #for step, (seq1, seq2, seq1_len, seq2_len, features) in tqdm( enumerate(loader), total = len(loader)):
     for step, (seq1, seq1_len) in tqdm( enumerate(data), total = len(data)):
 
-      #print(step, seq1, seq1_len)
-      #### We need to make this work for batches of compounds?
-
-
-      #if with_features:
-      #  seq1, seq2, seq1_len, seq2_len, mol_features = self.iterator.get_next()
-      #else:
-      #  seq1, seq2, seq1_len, seq2_len = self.iterator.get_next() !!!!!!!
       '''
       if self.rand_input_swap:
         ### TF RANDOM UNIFORM --> MIGHT BE BETTER REPHRASED with a not?
@@ -68,6 +54,9 @@ def train(hparams):
         target_seq = seq2
         target_len = seq2_len
       '''
+      
+      print("They are already torch tensors? [Check]")
+
       input_seq = torch.tensor(seq1)
       input_len = torch.tensor(seq1_len)
       target_seq = torch.tensor(seq1)
